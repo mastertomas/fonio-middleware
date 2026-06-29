@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ListingStatus {
+  LIVE
+  DRAFT
+  HIDDEN
+  UNKNOWN
+}
+
+enum AvailabilityMode {
+  PARENT_ONLY
+  CHILDREN_ONLY
+  BOTH
+}
+
+enum RequestType {
+  ADD_GUEST
+  ADD_PET
+  CANCELLATION
+  MODIFICATION
+  EARLY_CHECKIN
+  LATE_CHECKOUT
+  RESERVATION_QUESTION
+  OTHER
+}
+
+enum RequestStatus {
+  PENDING
+  AUTO_APPROVED
+  FORWARDED
+  REJECTED
+  COMPLETED
+}
+
+enum ApprovalMode {
+  AUTO
+  MANUAL
+  DENY
+}
+
+enum AdminRole {
+  VIEWER
+  EDITOR
+  ADMIN
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+  SECURITY
+}
+
+model AdminUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  role         AdminRole @default(EDITOR)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model ListingGroup {
+  id               String           @id @default(uuid())
+  hostawayParentId Int              @unique
+  name             String
+  city             String?
+  availabilityMode AvailabilityMode @default(BOTH)
+  listings         Listing[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model Listing {
+  id               String         @id @default(uuid())
+  hostawayId       Int            @unique
+  name             String
+  city             String?
+  region           String?
+  personCapacity   Int            @default(1)
+  bedroomsNumber   Int?
+  roomType         String?
+  petsAllowed      Boolean        @default(false)
+  status           ListingStatus  @default(UNKNOWN)
+  isBookable       Boolean        @default(true)
+  listingGroupId   String?
+  listingGroup     ListingGroup?  @relation(fields: [listingGroupId], references: [id])
+  parentHostawayId Int?
+  tags             String[]
+  rawMetadata      Json?
+  calendarDays     CalendarDay[]
+  reservations     Reservation[]
+  approvalRules    ApprovalRule[]
+  lastSyncedAt     DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([city])
+  @@index([status, isBookable])
+  @@index([listingGroupId])
+}
+
+model CalendarDay {
+  id          String   @id @default(uuid())
+  listingId   String
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  date        DateTime @db.Date
+  isAvailable Boolean  @default(true)
+  minNights   Int?
+  price       Float?
+  syncedAt    DateTime @default(now())
+
+  @@unique([listingId, date])
+  @@index([date, isAvailable])
+}
+
+model Reservation {
+  id                 String          @id @default(uuid())
+  hostawayId         Int             @unique
+  listingId          String
+  listing            Listing         @relation(fields: [listingId], references: [id])
+  arrivalDate        DateTime        @db.Date
+  departureDate      DateTime        @db.Date
+  numberOfGuests     Int
+  adults             Int?
+  children           Int?
+  pets               Int?
+  status             String
+  phoneHash          String?
+  emailHash          String?
+  guestNameMasked    String?
+  hostawayConversationId Int?
+  guestRequests      GuestRequest[]
+  lastSyncedAt       DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([phoneHash])
+  @@index([emailHash])
+  @@index([arrivalDate, departureDate])
+}
+
+model VerificationConfig {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  requiredFields  String[]
+  minMatchCount   Int      @default(2)
+  isDefault       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ApprovalRule {
+  id          String       @id @default(uuid())
+  listingId   String?
+  listing     Listing?     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  requestType RequestType
+  mode        ApprovalMode @default(MANUAL)
+  conditions  Json?
+  priority    Int          @default(0)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([requestType, isActive])
+  @@index([listingId])
+}
+
+model GuestRequest {
+  id               String        @id @default(uuid())
+  reservationId    String?
+  reservation      Reservation?  @relation(fields: [reservationId], references: [id])
+  requestType      RequestType
+  status           RequestStatus @default(PENDING)
+  payload          Json
+  fonioCallId      String?
+  callerPhoneHash  String?
+  forwardedToHostaway Boolean    @default(false)
+  hostawayMessageId Int?
+  resolutionNote   String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ApiLog {
+  id           String   @id @default(uuid())
+  level        LogLevel @default(INFO)
+  source       String
+  action       String
+  method       String?
+  path         String?
+  statusCode   Int?
+  durationMs   Int?
+  metadata     Json?
+  ipHash       String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([expiresAt])
+  @@index([source, action])
+  @@index([createdAt])
+}
+
+model HostawayToken {
+  id          String   @id @default(uuid())
+  accessToken String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SyncJob {
+  id         String    @id @default(uuid())
+  jobType    String
+  status     String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  error      String?
+  metadata   Json?
+}

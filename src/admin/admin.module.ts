@@ -1,0 +1,27 @@
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { HostawayModule } from '../hostaway/hostaway.module';
+import { AdminAuthController } from './admin-auth.controller';
+import { AdminAuthService } from './admin-auth.service';
+import { AdminController } from './admin.controller';
+import { JwtStrategy } from './jwt.strategy';
+
+@Module({
+  imports: [
+    HostawayModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN') ?? '8h' },
+      }),
+    }),
+  ],
+  controllers: [AdminAuthController, AdminController],
+  providers: [AdminAuthService, JwtStrategy],
+})
+export class AdminModule {}
