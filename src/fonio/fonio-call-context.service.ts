@@ -1,14 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import {
-  extractFirstName,
-  phoneHashVariants,
-} from '../common/utils/crypto.util';
+import { ConfigService } from '@nestjs/config';
+import { phoneHashVariants } from '../common/utils/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { FonioCallContextDto } from './dto/call-context.dto';
 
 @Injectable()
 export class FonioCallContextService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async buildContext(dto: FonioCallContextDto) {
     const base = {
@@ -19,9 +20,12 @@ export class FonioCallContextService {
       caller_recognized: false,
       has_upcoming_booking: false,
       guest_name_hint: null as string | null,
+      guest_first_name_hint: null as string | null,
       listing_city_hint: null as string | null,
+      reservation_id_hint: null as number | null,
       greeting_hint:
         'Guten Tag, Sie erreichen brainions Vermietung. Wie kann ich Ihnen helfen?',
+      hint_requires_verification: true,
     };
 
     if (!dto.callerNumber) {
@@ -46,7 +50,7 @@ export class FonioCallContextService {
       return base;
     }
 
-    const firstName = extractFirstName(reservation.guestNameMasked);
+    const firstName = reservation.guestFirstNameHint;
     const greeting = firstName
       ? `Guten Tag ${firstName}, Sie erreichen brainions Vermietung. Ich sehe, dass Sie eine anstehende Buchung haben. Wie kann ich Ihnen helfen?`
       : 'Guten Tag, Sie erreichen brainions Vermietung. Ich sehe, dass Sie eine anstehende Buchung haben. Wie kann ich Ihnen helfen?';
@@ -56,10 +60,42 @@ export class FonioCallContextService {
       caller_recognized: true,
       has_upcoming_booking: true,
       guest_name_hint: reservation.guestNameMasked,
+      guest_first_name_hint: firstName,
       listing_city_hint: reservation.listing.city,
+      reservation_id_hint: reservation.hostawayId,
       greeting_hint: greeting,
-      // fonio can use these in prompts – full details still require guest/verify
-      hint_requires_verification: true,
+    };
+  }
+
+  getSetupUrls() {
+    const base =
+      this.config.get<string>('APP_URL') ?? 'http://localhost:3000';
+    const production =
+      this.config.get<string>('PRODUCTION_URL') ??
+      'https://vermietung.brainions.digital';
+
+    return {
+      local: this.buildUrlSet(base),
+      production: this.buildUrlSet(production),
+      fonioApiKeyConfigured: Boolean(this.config.get('FONIO_API_KEY')),
+      notes: [
+        'Use x-api-key header with your fonio API key on all fonio endpoints.',
+        'call-context is the inbound webhook when a call starts.',
+        'guest/verify is required before sharing full booking details.',
+      ],
+    };
+  }
+
+  private buildUrlSet(baseUrl: string) {
+    const base = baseUrl.replace(/\/$/, '');
+    return {
+      call_context_webhook: `${base}/api/v1/fonio/call-context`,
+      availability: `${base}/api/v1/fonio/availability`,
+      guest_verify: `${base}/api/v1/fonio/guest/verify`,
+      guest_reservation: `${base}/api/v1/fonio/guest/reservation`,
+      guest_requests: `${base}/api/v1/fonio/guest/requests`,
+      hostaway_webhook: `${base}/webhooks/hostaway`,
+      swagger_docs: `${base}/docs`,
     };
   }
 }

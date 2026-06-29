@@ -138,6 +138,7 @@ model Reservation {
   phoneHash          String?
   emailHash          String?
   guestNameMasked    String?
+  guestFirstNameHint String?
   hostawayConversationId Int?
   guestRequests      GuestRequest[]
   lastSyncedAt       DateTime?

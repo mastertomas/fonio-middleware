@@ -44,6 +44,17 @@ export class AdminController {
     });
   }
 
+  @Get('sync/status')
+  @ApiOperation({ summary: 'Last sync job status' })
+  async syncStatus() {
+    const last = await this.prisma.syncJob.findFirst({
+      orderBy: { startedAt: 'desc' },
+    });
+    const listingCount = await this.prisma.listing.count();
+    const reservationCount = await this.prisma.reservation.count();
+    return { last, listingCount, reservationCount };
+  }
+
   @Post('sync')
   @ApiOperation({ summary: 'Trigger Hostaway full sync' })
   triggerSync() {

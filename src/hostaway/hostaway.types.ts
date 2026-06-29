@@ -46,6 +46,8 @@ export interface HostawayReservation {
   pets: number | null;
   status: string;
   guestName: string;
+  guestFirstName?: string | null;
+  guestLastName?: string | null;
   guestEmail: string | null;
   phone: string | null;
 }

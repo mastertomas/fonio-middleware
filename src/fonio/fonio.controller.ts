@@ -15,6 +15,7 @@ import { FonioCallContextDto } from './dto/call-context.dto';
 import { GuestRequestDto } from './dto/guest-request.dto';
 import { GuestVerifyDto } from './dto/guest-verify.dto';
 import { FonioAvailabilityService } from './fonio-availability.service';
+import { ConfigService } from '@nestjs/config';
 import { FonioCallContextService } from './fonio-call-context.service';
 import { FonioRequestsService } from './fonio-requests.service';
 import { FonioVerificationService } from './fonio-verification.service';
@@ -31,6 +32,12 @@ export class FonioController {
     private readonly requests: FonioRequestsService,
     private readonly audit: AuditLogService,
   ) {}
+
+  @Get('setup')
+  @ApiOperation({ summary: 'fonio.ai integration URLs (copy into fonio dashboard)' })
+  getSetup() {
+    return this.callContextService.getSetupUrls();
+  }
 
   @Post('call-context')
   @ApiOperation({ summary: 'Inbound webhook – caller context for fonio prompt' })

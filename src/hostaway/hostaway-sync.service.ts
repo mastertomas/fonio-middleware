@@ -211,6 +211,10 @@ export class HostawaySyncService {
           guestNameMasked: remote.guestName
             ? maskGuestName(remote.guestName)
             : null,
+          guestFirstNameHint:
+            remote.guestFirstName?.trim() ||
+            remote.guestName?.trim().split(/\s+/)[0] ||
+            null,
           hostawayConversationId: conversationId,
           lastSyncedAt: new Date(),
         },
@@ -230,6 +234,10 @@ export class HostawaySyncService {
           guestNameMasked: remote.guestName
             ? maskGuestName(remote.guestName)
             : null,
+          guestFirstNameHint:
+            remote.guestFirstName?.trim() ||
+            remote.guestName?.trim().split(/\s+/)[0] ||
+            null,
           hostawayConversationId: conversationId ?? undefined,
           lastSyncedAt: new Date(),
         },
