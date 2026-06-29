@@ -4,6 +4,7 @@ coverage
 .env
 .env.local
 .env.*.local
+.data
 
 /generated/prisma
 
@@ -14,3 +15,4 @@ Thumbs.db
 .idea
 .vscode/*
 !.vscode/extensions.json
+package-lock.json
