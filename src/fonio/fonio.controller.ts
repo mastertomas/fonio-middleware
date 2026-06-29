@@ -15,6 +15,7 @@ import { FonioCallContextDto } from './dto/call-context.dto';
 import { GuestRequestDto } from './dto/guest-request.dto';
 import { GuestVerifyDto } from './dto/guest-verify.dto';
 import { FonioAvailabilityService } from './fonio-availability.service';
+import { FonioCallContextService } from './fonio-call-context.service';
 import { FonioRequestsService } from './fonio-requests.service';
 import { FonioVerificationService } from './fonio-verification.service';
 
@@ -24,6 +25,7 @@ import { FonioVerificationService } from './fonio-verification.service';
 @UseGuards(FonioApiKeyGuard)
 export class FonioController {
   constructor(
+    private readonly callContextService: FonioCallContextService,
     private readonly availability: FonioAvailabilityService,
     private readonly verification: FonioVerificationService,
     private readonly requests: FonioRequestsService,
@@ -33,14 +35,16 @@ export class FonioController {
   @Post('call-context')
   @ApiOperation({ summary: 'Inbound webhook – caller context for fonio prompt' })
   async callContext(@Body() dto: FonioCallContextDto) {
-    return {
-      verified: false,
-      caller_phone: dto.callerNumber ?? null,
-      call_id: dto.callId ?? null,
-      language: 'de',
-      greeting_hint:
-        'Guten Tag, Sie erreichen brainions Vermietung. Wie kann ich Ihnen helfen?',
-    };
+    const context = await this.callContextService.buildContext(dto);
+    await this.audit.log({
+      source: 'fonio',
+      action: 'call_context',
+      metadata: {
+        caller_recognized: context.caller_recognized,
+        has_upcoming_booking: context.has_upcoming_booking,
+      },
+    });
+    return context;
   }
 
   @Get('availability')

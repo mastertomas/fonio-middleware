@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { HostawayModule } from '../hostaway/hostaway.module';
 import { RulesModule } from '../rules/rules.module';
 import { FonioAvailabilityService } from './fonio-availability.service';
+import { FonioCallContextService } from './fonio-call-context.service';
 import { FonioController } from './fonio.controller';
 import { FonioRequestsService } from './fonio-requests.service';
 import { FonioVerificationService } from './fonio-verification.service';
@@ -26,6 +27,7 @@ import { FonioVerificationService } from './fonio-verification.service';
   controllers: [FonioController],
   providers: [
     FonioAvailabilityService,
+    FonioCallContextService,
     FonioVerificationService,
     FonioRequestsService,
   ],

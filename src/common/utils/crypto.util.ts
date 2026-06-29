@@ -26,6 +26,31 @@ export function phonesMatch(a: string, b: string): boolean {
   return da.length >= 8 && da === db;
 }
 
-export function emailsMatch(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
+export function hashPhoneForStorage(phone: string): string {
+  return hashValue(normalizePhone(phone));
+}
+
+export function phoneHashVariants(phone: string): string[] {
+  const normalized = normalizePhone(phone);
+  const variants = new Set<string>([hashValue(normalized), hashValue(phone)]);
+
+  const digits = normalized.replace(/\D/g, '');
+  if (digits.length >= 10) {
+    variants.add(hashValue(digits.slice(-10)));
+  }
+  if (digits.startsWith('49') && digits.length > 10) {
+    variants.add(hashValue(`+${digits}`));
+    variants.add(hashValue(`0${digits.slice(2)}`));
+  }
+
+  return [...variants];
+}
+
+export function extractFirstName(maskedName: string | null): string | null {
+  if (!maskedName) return null;
+  const first = maskedName.trim().split(/\s+/)[0];
+  if (!first || first === '*') return null;
+  return first.replace(/\*+$/, '').length > 0
+    ? first.replace(/\*+$/, '')
+    : first[0];
 }

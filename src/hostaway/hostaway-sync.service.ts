@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ListingStatus } from '@prisma/client';
-import { hashValue, maskGuestName } from '../common/utils/crypto.util';
+import { hashPhoneForStorage, hashValue, maskGuestName } from '../common/utils/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { HostawayClient } from './hostaway.client';
 import {
@@ -204,7 +204,7 @@ export class HostawaySyncService {
           children: remote.children,
           pets: remote.pets,
           status: remote.status,
-          phoneHash: remote.phone ? hashValue(remote.phone) : null,
+          phoneHash: remote.phone ? hashPhoneForStorage(remote.phone) : null,
           emailHash: remote.guestEmail
             ? hashValue(remote.guestEmail)
             : null,
@@ -223,7 +223,7 @@ export class HostawaySyncService {
           children: remote.children,
           pets: remote.pets,
           status: remote.status,
-          phoneHash: remote.phone ? hashValue(remote.phone) : null,
+          phoneHash: remote.phone ? hashPhoneForStorage(remote.phone) : null,
           emailHash: remote.guestEmail
             ? hashValue(remote.guestEmail)
             : null,

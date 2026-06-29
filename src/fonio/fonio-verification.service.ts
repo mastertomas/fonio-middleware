@@ -4,7 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { hashValue, phonesMatch } from '../common/utils/crypto.util';
+import { hashPhoneForStorage, hashValue, phonesMatch } from '../common/utils/crypto.util';
 import { HostawayClient } from '../hostaway/hostaway.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GuestVerifyDto } from './dto/guest-verify.dto';
@@ -54,7 +54,7 @@ export class FonioVerificationService {
 
     if (dto.phone) {
       let phoneVerified = false;
-      if (reservation.phoneHash && hashValue(dto.phone) === reservation.phoneHash) {
+      if (reservation.phoneHash && hashPhoneForStorage(dto.phone) === reservation.phoneHash) {
         phoneVerified = true;
       } else {
         const remote = await this.hostaway.getReservation(dto.reservationId);

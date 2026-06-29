@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Redirect } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from './prisma/prisma.service';
 
@@ -6,6 +6,12 @@ import { PrismaService } from './prisma/prisma.service';
 @Controller()
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
+
+  @Get()
+  @Redirect('/docs', 302)
+  root() {
+    return;
+  }
 
   @Get('health')
   @ApiOperation({ summary: 'Health check' })
