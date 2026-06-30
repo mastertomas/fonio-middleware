@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY prisma ./prisma/
-COPY prisma.config.ts ./
 
 RUN npm ci
 
@@ -19,13 +18,21 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+RUN apk add --no-cache openssl
+
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && npm install prisma@6.19.3 --no-save
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+
+RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 3000
 
+ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["node", "dist/main.js"]

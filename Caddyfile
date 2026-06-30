@@ -1,0 +1,9 @@
+{$DOMAIN:vermietung.brainions.digital} {
+	encode gzip
+
+	handle /health {
+		reverse_proxy api:3000
+	}
+
+	reverse_proxy api:3000
+}

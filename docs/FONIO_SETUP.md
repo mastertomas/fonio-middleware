@@ -14,7 +14,7 @@ Header: x-api-key: <your fonio key>
 Or after admin login:
 
 ```
-GET /api/v1/admin/sync/status
+GET /api/v1/admin/fonio-setup
 ```
 
 ## Local development

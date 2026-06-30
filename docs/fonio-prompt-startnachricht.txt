@@ -1,0 +1,5 @@
+{{#if caller_recognized}}
+{{greeting_hint}}
+{{else}}
+Guten Tag, Sie erreichen brainions Vermietung. Wie kann ich Ihnen helfen?
+{{/if}}

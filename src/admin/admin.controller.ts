@@ -10,6 +10,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { FonioCallContextService } from '../fonio/fonio-call-context.service';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -25,6 +26,7 @@ export class AdminController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sync: HostawaySyncService,
+    private readonly fonioSetup: FonioCallContextService,
   ) {}
 
   @Get('listings')
@@ -122,5 +124,11 @@ export class AdminController {
       take: 200,
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  @Get('fonio-setup')
+  @ApiOperation({ summary: 'fonio.ai integration URLs for dashboard' })
+  getFonioSetup() {
+    return this.fonioSetup.getSetupUrls();
   }
 }

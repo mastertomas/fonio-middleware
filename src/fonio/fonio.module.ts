@@ -31,5 +31,6 @@ import { FonioVerificationService } from './fonio-verification.service';
     FonioVerificationService,
     FonioRequestsService,
   ],
+  exports: [FonioCallContextService],
 })
 export class FonioModule {}

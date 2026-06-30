@@ -1,0 +1,70 @@
+{
+  "apiKeyHeader": {
+    "name": "x-api-key",
+    "value": "YOUR_FONIO_API_KEY_FROM_ENV"
+  },
+  "tools": [
+    {
+      "name": "Verfügbarkeit prüfen",
+      "method": "GET",
+      "urlPath": "/api/v1/fonio/availability",
+      "queryParams": {
+        "city": "Stuttgart",
+        "checkIn": "2026-07-10",
+        "checkOut": "2026-07-15",
+        "guests": 2,
+        "pets": false
+      },
+      "whenToUse": "Anrufer fragt nach freien Unterkünften, Verfügbarkeit oder neuer Buchung"
+    },
+    {
+      "name": "Gast verifizieren",
+      "method": "POST",
+      "urlPath": "/api/v1/fonio/guest/verify",
+      "bodyExample": {
+        "reservationId": 62144308,
+        "phone": "+491234567890",
+        "arrivalDate": "2026-07-06",
+        "departureDate": "2026-07-16"
+      },
+      "whenToUse": "Gast hat Fragen zur eigenen Buchung oder möchte eine Änderung"
+    },
+    {
+      "name": "Buchung abrufen",
+      "method": "GET",
+      "urlPath": "/api/v1/fonio/guest/reservation",
+      "queryParams": {
+        "reservationId": 62144308,
+        "verificationToken": "FROM_VERIFY_RESPONSE"
+      },
+      "whenToUse": "Nur nach erfolgreicher Verifizierung"
+    },
+    {
+      "name": "Gästeanfrage",
+      "method": "POST",
+      "urlPath": "/api/v1/fonio/guest/requests",
+      "bodyExample": {
+        "reservationId": 62144308,
+        "requestType": "ADD_PET",
+        "verificationToken": "FROM_VERIFY_RESPONSE",
+        "details": { "note": "Kleiner Hund" }
+      },
+      "requestTypes": [
+        "ADD_GUEST",
+        "ADD_PET",
+        "CANCELLATION",
+        "MODIFICATION",
+        "EARLY_CHECKIN",
+        "LATE_CHECKOUT",
+        "RESERVATION_QUESTION",
+        "OTHER"
+      ],
+      "whenToUse": "Verifizierter Gast möchte Haustier, Extra-Gast, Storno, Check-in/out etc."
+    }
+  ],
+  "inboundWebhook": {
+    "method": "POST",
+    "urlPath": "/api/v1/fonio/call-context",
+    "note": "fonio sendet callerNumber automatisch"
+  }
+}

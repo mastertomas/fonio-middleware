@@ -1,10 +1,17 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { join } from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  app.useStaticAssets(join(__dirname, '..', 'public', 'admin'), {
+    prefix: '/admin',
+    index: 'index.html',
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -30,6 +37,7 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
   console.log(`Middleware API running on http://localhost:${port}`);
+  console.log(`Admin UI: http://localhost:${port}/admin`);
   console.log(`Swagger docs: http://localhost:${port}/docs`);
 }
 bootstrap();

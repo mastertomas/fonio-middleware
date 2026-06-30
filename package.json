@@ -20,6 +20,7 @@
     "db:setup": "powershell -ExecutionPolicy Bypass -File ./scripts/start-postgres.ps1; npm run prisma:deploy",
     "docker:up": "docker compose up -d postgres redis",
     "docker:down": "docker compose down",
+    "docker:prod": "docker compose -f docker-compose.prod.yml up -d --build",
     "setup:local": "powershell -ExecutionPolicy Bypass -File ./scripts/setup-local.ps1 -Migrate",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",

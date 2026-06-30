@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>brainions Vermietung – Admin</title>
+  <link rel="stylesheet" href="/admin/styles.css" />
+</head>
+<body>
+  <div id="login-screen" class="screen">
+    <div class="card login-card">
+      <h1>brainions Vermietung</h1>
+      <p class="subtitle">Middleware Admin</p>
+      <form id="login-form">
+        <label>E-Mail</label>
+        <input type="email" id="email" required autocomplete="username" />
+        <label>Passwort</label>
+        <input type="password" id="password" required autocomplete="current-password" />
+        <button type="submit" class="btn primary">Anmelden</button>
+        <p id="login-error" class="error hidden"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-screen" class="screen hidden">
+    <aside class="sidebar">
+      <div class="brand">brainions Admin</div>
+      <nav>
+        <button data-tab="dashboard" class="nav-btn active">Dashboard</button>
+        <button data-tab="listings" class="nav-btn">Unterkünfte</button>
+        <button data-tab="rules" class="nav-btn">Regeln</button>
+        <button data-tab="requests" class="nav-btn">Gästeanfragen</button>
+        <button data-tab="logs" class="nav-btn">Protokoll</button>
+        <button data-tab="fonio" class="nav-btn">fonio Setup</button>
+      </nav>
+      <button id="logout-btn" class="btn ghost">Abmelden</button>
+    </aside>
+
+    <main class="content">
+      <section id="tab-dashboard" class="tab active">
+        <header class="page-header">
+          <h2>Dashboard</h2>
+          <button id="sync-btn" class="btn primary">Hostaway Sync</button>
+        </header>
+        <div class="stats" id="stats"></div>
+        <div class="card" id="sync-result"></div>
+      </section>
+
+      <section id="tab-listings" class="tab hidden">
+        <header class="page-header"><h2>Unterkünfte</h2></header>
+        <div class="table-wrap" id="listings-table"></div>
+      </section>
+
+      <section id="tab-rules" class="tab hidden">
+        <header class="page-header"><h2>Freigabe-Regeln</h2></header>
+        <div class="card">
+          <h3>Neue Regel</h3>
+          <form id="rule-form" class="grid-form">
+            <label>Typ
+              <select id="rule-type" required>
+                <option value="ADD_GUEST">Zusätzlicher Gast</option>
+                <option value="ADD_PET">Haustier</option>
+                <option value="CANCELLATION">Storno</option>
+                <option value="MODIFICATION">Änderung</option>
+                <option value="EARLY_CHECKIN">Früher Check-in</option>
+                <option value="LATE_CHECKOUT">Später Check-out</option>
+                <option value="RESERVATION_QUESTION">Buchungsfrage</option>
+              </select>
+            </label>
+            <label>Modus
+              <select id="rule-mode" required>
+                <option value="AUTO">Automatisch</option>
+                <option value="MANUAL">Manuell</option>
+                <option value="DENY">Ablehnen</option>
+              </select>
+            </label>
+            <label>Priorität <input type="number" id="rule-priority" value="0" /></label>
+            <button type="submit" class="btn primary">Regel speichern</button>
+          </form>
+        </div>
+        <div class="table-wrap" id="rules-table"></div>
+        <div class="card" id="verification-config"></div>
+      </section>
+
+      <section id="tab-requests" class="tab hidden">
+        <header class="page-header"><h2>Gästeanfragen</h2></header>
+        <div class="table-wrap" id="requests-table"></div>
+      </section>
+
+      <section id="tab-logs" class="tab hidden">
+        <header class="page-header"><h2>API-Protokoll</h2></header>
+        <div class="table-wrap" id="logs-table"></div>
+      </section>
+
+      <section id="tab-fonio" class="tab hidden">
+        <header class="page-header"><h2>fonio.ai Integration</h2></header>
+        <div class="card" id="fonio-setup"></div>
+        <div class="card">
+          <h3>Prompt-Vorlagen (im Projekt)</h3>
+          <ul class="doc-list">
+            <li><code>docs/fonio-prompt-startnachricht.txt</code> → fonio Startnachricht</li>
+            <li><code>docs/fonio-prompt-system-de.txt</code> → fonio System-Prompt</li>
+            <li><code>docs/fonio-tools-config.json</code> → API-Tool Referenz</li>
+            <li><code>docs/FONIO_SETUP.md</code> → Ausführliche Anleitung</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/admin/app.js"></script>
+</body>
+</html>

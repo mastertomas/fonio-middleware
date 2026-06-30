@@ -60,6 +60,7 @@ npm run start:dev
 
 - API: http://localhost:3000
 - Swagger: http://localhost:3000/docs
+- Admin UI: http://localhost:3000/admin
 - Health: http://localhost:3000/health
 
 ### 6. Initial sync from Hostaway
@@ -133,6 +134,23 @@ src/
 ```bash
 docker compose --profile full up -d --build
 ```
+
+## Production deployment
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for deploying to `vermietung.brainions.digital` with Docker + Caddy.
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+## fonio.ai prompt templates
+
+German prompt files for fonio configuration:
+
+- `docs/fonio-prompt-startnachricht.txt` — greeting template
+- `docs/fonio-prompt-system-de.txt` — system prompt
+- `docs/fonio-tools-config.json` — API tool reference
+- `docs/FONIO_SETUP.md` — step-by-step setup guide
 
 ## Security notes
 
