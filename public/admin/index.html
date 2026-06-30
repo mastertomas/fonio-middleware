@@ -70,8 +70,12 @@
       <section id="tab-rules" class="tab hidden">
         <header class="page-header"><h2 data-i18n="rules.title">Approval rules</h2></header>
         <div class="card">
-          <h3 data-i18n="rules.editRule">Edit rule</h3>
+          <div class="form-header">
+            <h3 id="rule-form-title" data-i18n="rules.newRule">New rule</h3>
+            <button type="button" id="rule-new-btn" class="btn ghost" data-i18n="rules.newRuleBtn">+ New rule</button>
+          </div>
           <form id="rule-form" class="grid-form">
+            <input type="hidden" id="rule-id" value="" />
             <label><span data-i18n="rules.type">Type</span>
               <select id="rule-type" required>
                 <option value="ADD_GUEST">ADD_GUEST</option>
@@ -90,13 +94,21 @@
                 <option value="DENY">DENY</option>
               </select>
             </label>
+            <label><span data-i18n="rules.listing">Listing</span>
+              <select id="rule-listing">
+                <option value="" data-i18n="rules.global">Global</option>
+              </select>
+            </label>
             <label><span data-i18n="rules.priority">Priority</span>
               <input type="number" id="rule-priority" value="0" min="0" />
               <span class="field-hint" data-i18n="rules.priorityHint">Higher number wins when multiple rules match.</span>
             </label>
             <div class="form-actions">
               <span class="field-label" aria-hidden="true">&nbsp;</span>
-              <button type="submit" class="btn primary" data-i18n="rules.save">Save rule</button>
+              <div class="form-action-btns">
+                <button type="submit" id="rule-submit-btn" class="btn primary" data-i18n="rules.addRule">Add rule</button>
+                <button type="button" id="rule-delete-btn" class="btn ghost hidden" data-i18n="rules.delete">Delete</button>
+              </div>
             </div>
           </form>
         </div>
@@ -131,6 +143,7 @@
   </div>
 
   <script src="/admin/i18n.js"></script>
+  <script src="/admin/notifications.js"></script>
   <script src="/admin/app.js"></script>
 </body>
 </html>

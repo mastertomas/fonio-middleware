@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -15,6 +16,7 @@ import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateApprovalRuleDto,
+  UpdateApprovalRuleDto,
   UpdateVerificationConfigDto,
 } from './dto/admin-rules.dto';
 
@@ -73,47 +75,41 @@ export class AdminController {
   }
 
   @Post('rules')
-  @ApiOperation({ summary: 'Create or update approval rule (one per request type + listing)' })
-  async upsertRule(@Body() dto: CreateApprovalRuleDto) {
-    const listingId = dto.listingId ?? null;
-    const existing = await this.prisma.approvalRule.findFirst({
-      where: {
-        requestType: dto.requestType,
-        listingId,
-      },
-      orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
-    });
-
-    const data = {
-      mode: dto.mode,
-      conditions: dto.conditions as Prisma.InputJsonValue | undefined,
-      priority: dto.priority ?? 0,
-      isActive: dto.isActive ?? true,
-    };
-
-    if (existing) {
-      if (!listingId) {
-        await this.prisma.approvalRule.deleteMany({
-          where: {
-            requestType: dto.requestType,
-            listingId: null,
-            id: { not: existing.id },
-          },
-        });
-      }
-      return this.prisma.approvalRule.update({
-        where: { id: existing.id },
-        data,
-      });
-    }
-
+  @ApiOperation({ summary: 'Create approval rule' })
+  createRule(@Body() dto: CreateApprovalRuleDto) {
     return this.prisma.approvalRule.create({
       data: {
-        listingId: dto.listingId,
+        listingId: dto.listingId || null,
         requestType: dto.requestType,
-        ...data,
+        mode: dto.mode,
+        conditions: dto.conditions as Prisma.InputJsonValue | undefined,
+        priority: dto.priority ?? 0,
+        isActive: dto.isActive ?? true,
       },
     });
+  }
+
+  @Patch('rules/:id')
+  @ApiOperation({ summary: 'Update approval rule' })
+  updateRule(@Param('id') id: string, @Body() dto: UpdateApprovalRuleDto) {
+    return this.prisma.approvalRule.update({
+      where: { id },
+      data: {
+        ...dto,
+        listingId:
+          dto.listingId === undefined
+            ? undefined
+            : dto.listingId || null,
+        conditions: dto.conditions as Prisma.InputJsonValue | undefined,
+      },
+    });
+  }
+
+  @Delete('rules/:id')
+  @ApiOperation({ summary: 'Delete approval rule' })
+  async deleteRule(@Param('id') id: string) {
+    await this.prisma.approvalRule.delete({ where: { id } });
+    return { deleted: true };
   }
 
   @Get('verification-config')

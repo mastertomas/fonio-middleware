@@ -336,6 +336,30 @@ tr:last-child td { border-bottom: none; }
   margin: 0;
 }
 
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+.form-header h3 {
+  margin: 0;
+}
+
+.form-action-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.form-action-btns .btn.ghost {
+  color: var(--error);
+  border-color: var(--border);
+}
+
 .grid-form .form-actions .btn {
   width: 100%;
 }
@@ -370,6 +394,146 @@ tr:last-child td { border-bottom: none; }
 
 .doc-list { margin: 0.5rem 0 0 1.25rem; color: var(--muted); }
 .doc-list li { margin: 0.35rem 0; }
+
+/* Toasts */
+.toast-container {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-width: min(360px, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateX(1rem);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast.toast-in {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.toast.toast-out {
+  opacity: 0;
+  transform: translateX(1rem);
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.toast-success .toast-icon {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--success);
+}
+
+.toast-error .toast-icon {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--error);
+}
+
+.toast-info .toast-icon {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--primary);
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  padding-top: 0.1rem;
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.toast-close:hover {
+  color: var(--text);
+}
+
+/* Confirm modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.modal-title {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.modal-message {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.btn.danger {
+  background: var(--error);
+  color: white;
+}
+
+.btn.danger:hover {
+  background: #dc2626;
+}
+
+body.modal-open {
+  overflow: hidden;
+}
 
 @media (max-width: 768px) {
   #app-screen { grid-template-columns: 1fr; }

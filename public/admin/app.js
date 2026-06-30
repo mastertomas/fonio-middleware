@@ -4,6 +4,8 @@ const AUTH = '/api/v1/admin/auth';
 let token = localStorage.getItem('adminToken') || '';
 let activeTab = 'dashboard';
 let cachedRules = [];
+let cachedListings = [];
+let editingRuleId = null;
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
@@ -74,6 +76,7 @@ $$('.lang-select').forEach((sel) => {
 
 document.addEventListener('langchange', () => {
   refreshActiveTab();
+  updateRuleFormUI();
 });
 
 $('#login-form').addEventListener('submit', async (e) => {
@@ -120,9 +123,11 @@ $('#sync-btn').addEventListener('click', async () => {
   try {
     const data = await api('/sync', { method: 'POST' });
     el.innerHTML = `<p class="success">✓ ${t('dashboard.syncDone', { listings: data.listings, reservations: data.reservations })}</p>`;
+    notify.success(t('dashboard.syncDone', { listings: data.listings, reservations: data.reservations }));
     loadDashboard();
   } catch (ex) {
     el.innerHTML = `<p class="error">${t('dashboard.syncError', { message: ex.message })}</p>`;
+    notify.error(t('dashboard.syncError', { message: ex.message }));
   } finally {
     $('#sync-btn').disabled = false;
   }
@@ -130,50 +135,97 @@ $('#sync-btn').addEventListener('click', async () => {
 
 $('#rule-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const payload = {
+    requestType: $('#rule-type').value,
+    mode: $('#rule-mode').value,
+    listingId: $('#rule-listing').value || null,
+    priority: Number($('#rule-priority').value),
+    isActive: true,
+  };
   try {
-    await api('/rules', {
-      method: 'POST',
-      body: JSON.stringify({
-        requestType: $('#rule-type').value,
-        mode: $('#rule-mode').value,
-        priority: Number($('#rule-priority').value),
-        isActive: true,
-      }),
-    });
+    if (editingRuleId) {
+      await api(`/rules/${editingRuleId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      notify.success(t('rules.updated'));
+    } else {
+      await api('/rules', { method: 'POST', body: JSON.stringify(payload) });
+      notify.success(t('rules.created'));
+    }
     await loadRules();
-    alert(t('rules.saved'));
   } catch (ex) {
-    alert(t('rules.error', { message: ex.message }));
+    notify.error(t('rules.error', { message: ex.message }));
   }
 });
 
-$('#rule-type').addEventListener('change', syncRuleFormFromType);
+$('#rule-new-btn').addEventListener('click', resetRuleForm);
 
-function syncRuleFormFromType() {
-  const type = $('#rule-type').value;
-  const global = cachedRules
-    .filter((r) => !r.listingId && r.requestType === type)
-    .sort((a, b) => b.priority - a.priority || new Date(a.createdAt) - new Date(b.createdAt))[0];
-  if (global) {
-    $('#rule-mode').value = global.mode;
-    $('#rule-priority').value = global.priority;
-  } else {
-    $('#rule-priority').value = 0;
+$('#rule-delete-btn').addEventListener('click', async () => {
+  if (!editingRuleId) return;
+  const ok = await notify.confirm(t('rules.deleteConfirm'), {
+    title: t('rules.deleteTitle'),
+    okLabel: t('rules.delete'),
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await api(`/rules/${editingRuleId}`, { method: 'DELETE' });
+    notify.success(t('rules.deleted'));
+    resetRuleForm();
+    await loadRules();
+  } catch (ex) {
+    notify.error(t('rules.error', { message: ex.message }));
   }
-  highlightSelectedRule(type);
+});
+
+function updateRuleFormUI() {
+  const title = $('#rule-form-title');
+  const submit = $('#rule-submit-btn');
+  if (title) title.textContent = editingRuleId ? t('rules.editRule') : t('rules.newRule');
+  if (submit) submit.textContent = editingRuleId ? t('rules.updateRule') : t('rules.addRule');
+  $('#rule-delete-btn')?.classList.toggle('hidden', !editingRuleId);
 }
 
-function highlightSelectedRule(requestType) {
+function resetRuleForm() {
+  editingRuleId = null;
+  $('#rule-id').value = '';
+  $('#rule-type').value = 'ADD_GUEST';
+  $('#rule-mode').value = 'MANUAL';
+  $('#rule-listing').value = '';
+  $('#rule-priority').value = 0;
+  updateRuleFormUI();
+  highlightSelectedRule(null);
+}
+
+function loadRuleIntoForm(rule) {
+  editingRuleId = rule.id;
+  $('#rule-id').value = rule.id;
+  $('#rule-type').value = rule.requestType;
+  $('#rule-mode').value = rule.mode;
+  $('#rule-listing').value = rule.listingId || '';
+  $('#rule-priority').value = rule.priority;
+  updateRuleFormUI();
+  highlightSelectedRule(rule.id);
+}
+
+function populateListingSelect() {
+  const sel = $('#rule-listing');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = `<option value="">${t('rules.global')}</option>` +
+    cachedListings.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  sel.value = current;
+}
+
+function highlightSelectedRule(ruleId) {
   $$('#rules-table tbody tr').forEach((row) => {
-    row.classList.toggle('selected', row.dataset.requestType === requestType);
+    row.classList.toggle('selected', ruleId && row.dataset.ruleId === ruleId);
   });
 }
 
 function bindRuleRowClicks() {
-  $$('#rules-table tbody tr[data-request-type]').forEach((row) => {
+  $$('#rules-table tbody tr[data-rule-id]').forEach((row) => {
     row.addEventListener('click', () => {
-      $('#rule-type').value = row.dataset.requestType;
-      syncRuleFormFromType();
+      const rule = cachedRules.find((r) => r.id === row.dataset.ruleId);
+      if (rule) loadRuleIntoForm(rule);
     });
   });
 }
@@ -209,32 +261,19 @@ async function loadListings() {
 }
 
 async function loadRules() {
-  const [rules, config] = await Promise.all([
+  const [rules, config, listings] = await Promise.all([
     api('/rules'),
     api('/verification-config'),
+    api('/listings'),
   ]);
   cachedRules = rules;
+  cachedListings = listings;
+  populateListingSelect();
 
-  const globalByType = new Map();
-  for (const r of rules.filter((rule) => !rule.listingId)) {
-    const prev = globalByType.get(r.requestType);
-    if (!prev || r.priority > prev.priority) {
-      globalByType.set(r.requestType, r);
-    }
-  }
-  const displayRules = [
-    ...globalByType.values(),
-    ...rules.filter((r) => r.listingId),
-  ].sort((a, b) => {
-    const typeOrder = a.requestType.localeCompare(b.requestType);
-    if (typeOrder !== 0) return typeOrder;
-    return b.priority - a.priority;
-  });
-
-  const rows = displayRules.map((r) => `
-    <tr data-request-type="${r.requestType}" data-listing-id="${r.listingId || ''}">
+  const rows = rules.map((r) => `
+    <tr data-rule-id="${r.id}">
       <td>${t(`requestType.${r.requestType}`) || r.requestType}</td>
-      <td><span class="badge ${r.mode === 'AUTO' ? 'auto' : 'manual'}">${t(`mode.${r.mode}`) || r.mode}</span></td>
+      <td><span class="badge ${r.mode === 'AUTO' ? 'auto' : r.mode === 'DENY' ? 'manual' : 'manual'}">${t(`mode.${r.mode}`) || r.mode}</span></td>
       <td>${r.listing?.name || t('rules.global')}</td>
       <td>${r.priority}</td>
       <td>${r.isActive ? t('rules.active') : t('rules.inactive')}</td>
@@ -244,13 +283,19 @@ async function loadRules() {
     <table><thead><tr>
       <th>${t('rules.col.type')}</th><th>${t('rules.col.mode')}</th><th>${t('rules.col.listing')}</th>
       <th>${t('rules.col.priority')}</th><th>${t('rules.col.status')}</th>
-    </tr></thead><tbody>${rows}</tbody></table>`;
+    </tr></thead><tbody>${rows || `<tr><td colspan="5">${t('rules.none')}</td></tr>`}</tbody></table>`;
   $('#verification-config').innerHTML = config ? `
     <h3>${t('rules.verification')}</h3>
     <p>${t('rules.requiredFields')} <code>${(config.requiredFields || []).join(', ')}</code></p>
     <p>${t('rules.minMatches')} <strong>${config.minMatchCount}</strong></p>
   ` : `<p>${t('rules.noConfig')}</p>`;
-  syncRuleFormFromType();
+  if (editingRuleId) {
+    const current = rules.find((r) => r.id === editingRuleId);
+    if (current) loadRuleIntoForm(current);
+    else resetRuleForm();
+  } else {
+    updateRuleFormUI();
+  }
   bindRuleRowClicks();
 }
 
