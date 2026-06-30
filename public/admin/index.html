@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,14 +9,21 @@
 <body>
   <div id="login-screen" class="screen">
     <div class="card login-card">
-      <h1>brainions Vermietung</h1>
-      <p class="subtitle">Middleware Admin</p>
+      <div class="lang-bar">
+        <label for="lang-login" data-i18n="lang.label">Language</label>
+        <select id="lang-login" class="lang-select" aria-label="Language">
+          <option value="en">English</option>
+          <option value="de">Deutsch</option>
+        </select>
+      </div>
+      <h1 data-i18n="app.title">brainions Vermietung</h1>
+      <p class="subtitle" data-i18n="login.subtitle">Middleware Admin</p>
       <form id="login-form">
-        <label>E-Mail</label>
+        <label for="email" data-i18n="login.email">Email</label>
         <input type="email" id="email" required autocomplete="username" />
-        <label>Passwort</label>
+        <label for="password" data-i18n="login.password">Password</label>
         <input type="password" id="password" required autocomplete="current-password" />
-        <button type="submit" class="btn primary">Anmelden</button>
+        <button type="submit" class="btn primary" data-i18n="login.submit">Sign in</button>
         <p id="login-error" class="error hidden"></p>
       </form>
     </div>
@@ -25,57 +32,72 @@
   <div id="app-screen" class="screen hidden">
     <aside class="sidebar">
       <div class="brand">brainions Admin</div>
-      <nav>
-        <button data-tab="dashboard" class="nav-btn active">Dashboard</button>
-        <button data-tab="listings" class="nav-btn">Unterkünfte</button>
-        <button data-tab="rules" class="nav-btn">Regeln</button>
-        <button data-tab="requests" class="nav-btn">Gästeanfragen</button>
-        <button data-tab="logs" class="nav-btn">Protokoll</button>
-        <button data-tab="fonio" class="nav-btn">fonio Setup</button>
+      <nav class="sidebar-nav">
+        <button data-tab="dashboard" class="nav-btn active" data-i18n="nav.dashboard">Dashboard</button>
+        <button data-tab="listings" class="nav-btn" data-i18n="nav.listings">Listings</button>
+        <button data-tab="rules" class="nav-btn" data-i18n="nav.rules">Rules</button>
+        <button data-tab="requests" class="nav-btn" data-i18n="nav.requests">Guest requests</button>
+        <button data-tab="logs" class="nav-btn" data-i18n="nav.logs">Audit log</button>
+        <button data-tab="fonio" class="nav-btn" data-i18n="nav.fonio">fonio Setup</button>
+        <div class="lang-bar sidebar-lang">
+          <label for="lang-app" data-i18n="lang.label">Language</label>
+          <select id="lang-app" class="lang-select" aria-label="Language">
+            <option value="en">English</option>
+            <option value="de">Deutsch</option>
+          </select>
+        </div>
       </nav>
-      <button id="logout-btn" class="btn ghost">Abmelden</button>
+      <div class="sidebar-footer">
+        <button id="logout-btn" class="btn ghost" data-i18n="nav.logout">Sign out</button>
+      </div>
     </aside>
 
     <main class="content">
       <section id="tab-dashboard" class="tab active">
         <header class="page-header">
-          <h2>Dashboard</h2>
-          <button id="sync-btn" class="btn primary">Hostaway Sync</button>
+          <h2 data-i18n="nav.dashboard">Dashboard</h2>
+          <button id="sync-btn" class="btn primary" data-i18n="dashboard.syncBtn">Hostaway Sync</button>
         </header>
         <div class="stats" id="stats"></div>
         <div class="card" id="sync-result"></div>
       </section>
 
       <section id="tab-listings" class="tab hidden">
-        <header class="page-header"><h2>Unterkünfte</h2></header>
+        <header class="page-header"><h2 data-i18n="listings.title">Listings</h2></header>
         <div class="table-wrap" id="listings-table"></div>
       </section>
 
       <section id="tab-rules" class="tab hidden">
-        <header class="page-header"><h2>Freigabe-Regeln</h2></header>
+        <header class="page-header"><h2 data-i18n="rules.title">Approval rules</h2></header>
         <div class="card">
-          <h3>Neue Regel</h3>
+          <h3 data-i18n="rules.editRule">Edit rule</h3>
           <form id="rule-form" class="grid-form">
-            <label>Typ
+            <label><span data-i18n="rules.type">Type</span>
               <select id="rule-type" required>
-                <option value="ADD_GUEST">Zusätzlicher Gast</option>
-                <option value="ADD_PET">Haustier</option>
-                <option value="CANCELLATION">Storno</option>
-                <option value="MODIFICATION">Änderung</option>
-                <option value="EARLY_CHECKIN">Früher Check-in</option>
-                <option value="LATE_CHECKOUT">Später Check-out</option>
-                <option value="RESERVATION_QUESTION">Buchungsfrage</option>
+                <option value="ADD_GUEST">ADD_GUEST</option>
+                <option value="ADD_PET">ADD_PET</option>
+                <option value="CANCELLATION">CANCELLATION</option>
+                <option value="MODIFICATION">MODIFICATION</option>
+                <option value="EARLY_CHECKIN">EARLY_CHECKIN</option>
+                <option value="LATE_CHECKOUT">LATE_CHECKOUT</option>
+                <option value="RESERVATION_QUESTION">RESERVATION_QUESTION</option>
               </select>
             </label>
-            <label>Modus
+            <label><span data-i18n="rules.mode">Mode</span>
               <select id="rule-mode" required>
-                <option value="AUTO">Automatisch</option>
-                <option value="MANUAL">Manuell</option>
-                <option value="DENY">Ablehnen</option>
+                <option value="AUTO">AUTO</option>
+                <option value="MANUAL">MANUAL</option>
+                <option value="DENY">DENY</option>
               </select>
             </label>
-            <label>Priorität <input type="number" id="rule-priority" value="0" /></label>
-            <button type="submit" class="btn primary">Regel speichern</button>
+            <label><span data-i18n="rules.priority">Priority</span>
+              <input type="number" id="rule-priority" value="0" min="0" />
+              <span class="field-hint" data-i18n="rules.priorityHint">Higher number wins when multiple rules match.</span>
+            </label>
+            <div class="form-actions">
+              <span class="field-label" aria-hidden="true">&nbsp;</span>
+              <button type="submit" class="btn primary" data-i18n="rules.save">Save rule</button>
+            </div>
           </form>
         </div>
         <div class="table-wrap" id="rules-table"></div>
@@ -83,31 +105,32 @@
       </section>
 
       <section id="tab-requests" class="tab hidden">
-        <header class="page-header"><h2>Gästeanfragen</h2></header>
+        <header class="page-header"><h2 data-i18n="requests.title">Guest requests</h2></header>
         <div class="table-wrap" id="requests-table"></div>
       </section>
 
       <section id="tab-logs" class="tab hidden">
-        <header class="page-header"><h2>API-Protokoll</h2></header>
+        <header class="page-header"><h2 data-i18n="logs.title">API audit log</h2></header>
         <div class="table-wrap" id="logs-table"></div>
       </section>
 
       <section id="tab-fonio" class="tab hidden">
-        <header class="page-header"><h2>fonio.ai Integration</h2></header>
+        <header class="page-header"><h2 data-i18n="fonio.title">fonio.ai integration</h2></header>
         <div class="card" id="fonio-setup"></div>
         <div class="card">
-          <h3>Prompt-Vorlagen (im Projekt)</h3>
+          <h3 data-i18n="fonio.promptTemplates">Prompt templates (in project)</h3>
           <ul class="doc-list">
-            <li><code>docs/fonio-prompt-startnachricht.txt</code> → fonio Startnachricht</li>
-            <li><code>docs/fonio-prompt-system-de.txt</code> → fonio System-Prompt</li>
-            <li><code>docs/fonio-tools-config.json</code> → API-Tool Referenz</li>
-            <li><code>docs/FONIO_SETUP.md</code> → Ausführliche Anleitung</li>
+            <li><code>docs/fonio-prompt-startnachricht.txt</code> <span data-i18n="fonio.doc.start">→ fonio greeting</span></li>
+            <li><code>docs/fonio-prompt-system-de.txt</code> <span data-i18n="fonio.doc.system">→ fonio system prompt</span></li>
+            <li><code>docs/fonio-tools-config.json</code> <span data-i18n="fonio.doc.tools">→ API tool reference</span></li>
+            <li><code>docs/FONIO_SETUP.md</code> <span data-i18n="fonio.doc.setup">→ Detailed setup guide</span></li>
           </ul>
         </div>
       </section>
     </main>
   </div>
 
+  <script src="/admin/i18n.js"></script>
   <script src="/admin/app.js"></script>
 </body>
 </html>

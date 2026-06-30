@@ -73,16 +73,45 @@ export class AdminController {
   }
 
   @Post('rules')
-  @ApiOperation({ summary: 'Create approval rule' })
-  createRule(@Body() dto: CreateApprovalRuleDto) {
+  @ApiOperation({ summary: 'Create or update approval rule (one per request type + listing)' })
+  async upsertRule(@Body() dto: CreateApprovalRuleDto) {
+    const listingId = dto.listingId ?? null;
+    const existing = await this.prisma.approvalRule.findFirst({
+      where: {
+        requestType: dto.requestType,
+        listingId,
+      },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+    });
+
+    const data = {
+      mode: dto.mode,
+      conditions: dto.conditions as Prisma.InputJsonValue | undefined,
+      priority: dto.priority ?? 0,
+      isActive: dto.isActive ?? true,
+    };
+
+    if (existing) {
+      if (!listingId) {
+        await this.prisma.approvalRule.deleteMany({
+          where: {
+            requestType: dto.requestType,
+            listingId: null,
+            id: { not: existing.id },
+          },
+        });
+      }
+      return this.prisma.approvalRule.update({
+        where: { id: existing.id },
+        data,
+      });
+    }
+
     return this.prisma.approvalRule.create({
       data: {
         listingId: dto.listingId,
         requestType: dto.requestType,
-        mode: dto.mode,
-        conditions: dto.conditions as Prisma.InputJsonValue | undefined,
-        priority: dto.priority,
-        isActive: dto.isActive,
+        ...data,
       },
     });
   }
