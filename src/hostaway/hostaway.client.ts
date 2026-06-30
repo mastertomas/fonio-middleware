@@ -87,11 +87,40 @@ export class HostawayClient {
     return data.result ?? [];
   }
 
+  async getAllListings(): Promise<HostawayListing[]> {
+    const all: HostawayListing[] = [];
+    const limit = 100;
+    let offset = 0;
+    for (;;) {
+      const batch = await this.getListings(limit, offset);
+      all.push(...batch);
+      if (batch.length < limit) break;
+      offset += limit;
+    }
+    return all;
+  }
+
   async getListing(id: number): Promise<HostawayListing> {
     const { data } = await this.http.get<HostawaySingleResponse<HostawayListing>>(
       `/listings/${id}`,
     );
     return data.result;
+  }
+
+  async getListingUnits(listingMapId: number) {
+    const { data } = await this.http.get<
+      HostawayListResponse<import('./hostaway.types').HostawayListingUnit>
+    >(`/listingUnits/${listingMapId}`);
+    return data.result ?? [];
+  }
+
+  async getConversationMessages(conversationId: number, limit = 20) {
+    const { data } = await this.http.get<
+      HostawayListResponse<import('./hostaway.types').HostawayConversationMessage>
+    >(`/conversations/${conversationId}/messages`, {
+      params: { limit, offset: 0 },
+    });
+    return data.result ?? [];
   }
 
   async getCalendar(
@@ -117,6 +146,22 @@ export class HostawayClient {
       HostawayListResponse<HostawayReservation>
     >('/reservations', { params });
     return data.result ?? [];
+  }
+
+  async getAllReservations(params: {
+    arrivalStartDate?: string;
+    arrivalEndDate?: string;
+  }): Promise<HostawayReservation[]> {
+    const all: HostawayReservation[] = [];
+    const limit = 100;
+    let offset = 0;
+    for (;;) {
+      const batch = await this.getReservations({ ...params, limit, offset });
+      all.push(...batch);
+      if (batch.length < limit) break;
+      offset += limit;
+    }
+    return all;
   }
 
   async getReservation(id: number): Promise<HostawayReservation> {

@@ -6,19 +6,26 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
+import {
+  paginated,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { FonioCallContextService } from '../fonio/fonio-call-context.service';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
+import { SyncSettingsService } from '../hostaway/sync-settings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateApprovalRuleDto,
   UpdateApprovalRuleDto,
   UpdateVerificationConfigDto,
 } from './dto/admin-rules.dto';
+import { UpdateSyncSettingsDto } from './dto/sync-settings.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -28,35 +35,109 @@ export class AdminController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sync: HostawaySyncService,
+    private readonly syncSettings: SyncSettingsService,
     private readonly fonioSetup: FonioCallContextService,
   ) {}
 
   @Get('listings')
-  @ApiOperation({ summary: 'List synced listings' })
-  listListings() {
-    return this.prisma.listing.findMany({
-      orderBy: { name: 'asc' },
-      include: { listingGroup: true },
-    });
+  @ApiOperation({ summary: 'List synced listings (paginated)' })
+  async listListings(@Query() query: PaginationQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 25;
+    const where = {};
+    const [total, items] = await Promise.all([
+      this.prisma.listing.count({ where }),
+      this.prisma.listing.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        include: { listingGroup: true },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+    return paginated(items, total, page, pageSize);
   }
 
   @Get('listing-groups')
-  @ApiOperation({ summary: 'List parent/child listing groups' })
-  listGroups() {
-    return this.prisma.listingGroup.findMany({
-      include: { listings: true },
-    });
+  @ApiOperation({ summary: 'List parent/child listing groups (paginated)' })
+  async listGroups(@Query() query: PaginationQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 25;
+    const [total, items] = await Promise.all([
+      this.prisma.listingGroup.count(),
+      this.prisma.listingGroup.findMany({
+        include: { listings: true },
+        orderBy: { name: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+    return paginated(items, total, page, pageSize);
   }
 
   @Get('sync/status')
-  @ApiOperation({ summary: 'Last sync job status' })
+  @ApiOperation({ summary: 'Last sync job status and auto-sync settings' })
   async syncStatus() {
-    const last = await this.prisma.syncJob.findFirst({
+    const [last, settings, listingCount, reservationCount] = await Promise.all([
+      this.prisma.syncJob.findFirst({ orderBy: { startedAt: 'desc' } }),
+      this.syncSettings.getOrCreate(),
+      this.prisma.listing.count(),
+      this.prisma.reservation.count(),
+    ]);
+    return { last, settings, listingCount, reservationCount };
+  }
+
+  @Get('sync/settings')
+  @ApiOperation({ summary: 'Auto-sync settings' })
+  getSyncSettings() {
+    return this.syncSettings.getOrCreate();
+  }
+
+  @Patch('sync/settings')
+  @ApiOperation({ summary: 'Update auto-sync settings' })
+  updateSyncSettings(@Body() dto: UpdateSyncSettingsDto) {
+    return this.syncSettings.update(dto);
+  }
+
+  @Get('sync/webhook-activity')
+  @ApiOperation({ summary: 'Recent Hostaway webhook-triggered sync activity' })
+  listWebhookActivity() {
+    return this.prisma.syncJob.findMany({
+      where: { jobType: { startsWith: 'webhook:' } },
+      take: 20,
       orderBy: { startedAt: 'desc' },
     });
-    const listingCount = await this.prisma.listing.count();
-    const reservationCount = await this.prisma.reservation.count();
-    return { last, listingCount, reservationCount };
+  }
+
+  @Get('reservations')
+  @ApiOperation({ summary: 'Synced reservations (paginated, admin contact data)' })
+  async listReservations(@Query() query: PaginationQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 25;
+    const [total, items] = await Promise.all([
+      this.prisma.reservation.count(),
+      this.prisma.reservation.findMany({
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { arrivalDate: 'desc' },
+        include: {
+          listing: { include: { listingGroup: true } },
+        },
+      }),
+    ]);
+    return paginated(items, total, page, pageSize);
+  }
+
+  @Get('reservations/:hostawayId/conversation')
+  @ApiOperation({ summary: 'Refresh and preview Hostaway conversation for a reservation' })
+  getReservationConversation(@Param('hostawayId') hostawayId: string) {
+    return this.sync.refreshReservationConversation(Number(hostawayId));
+  }
+
+  @Post('reservations/:hostawayId/refresh-conversation')
+  @ApiOperation({ summary: 'Re-fetch conversation ID from Hostaway' })
+  refreshConversation(@Param('hostawayId') hostawayId: string) {
+    return this.sync.refreshReservationConversation(Number(hostawayId));
   }
 
   @Post('sync')

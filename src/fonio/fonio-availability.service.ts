@@ -52,11 +52,22 @@ export class FonioAvailabilityService {
     const results: AvailabilityResultItem[] = [];
 
     for (const listing of listings) {
-      await this.sync.syncListingCalendar(
-        listing.hostawayId,
-        query.checkIn,
-        query.checkOut,
-      );
+      const cached = await this.prisma.calendarDay.findFirst({
+        where: { listingId: listing.id, date: { in: nights } },
+        orderBy: { syncedAt: 'desc' },
+      });
+      const cacheMaxAgeMs = 6 * 60 * 60 * 1000;
+      const cacheFresh =
+        cached &&
+        Date.now() - cached.syncedAt.getTime() < cacheMaxAgeMs;
+
+      if (!cacheFresh) {
+        await this.sync.syncListingCalendar(
+          listing.hostawayId,
+          query.checkIn,
+          query.checkOut,
+        );
+      }
 
       const days = await this.prisma.calendarDay.findMany({
         where: {

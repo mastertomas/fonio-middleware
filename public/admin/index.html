@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>brainions Vermietung – Admin</title>
+  <link rel="icon" type="image/png" href="/admin/logo.png" />
   <link rel="stylesheet" href="/admin/styles.css" />
 </head>
 <body>
@@ -16,7 +17,10 @@
           <option value="de">Deutsch</option>
         </select>
       </div>
-      <h1 data-i18n="app.title">brainions Vermietung</h1>
+      <h1 class="login-brand">
+        <img src="/admin/logo.png" alt="" class="login-logo" />
+        <span data-i18n="app.title">brainions Vermietung</span>
+      </h1>
       <p class="subtitle" data-i18n="login.subtitle">Middleware Admin</p>
       <form id="login-form">
         <label for="email" data-i18n="login.email">Email</label>
@@ -31,10 +35,16 @@
 
   <div id="app-screen" class="screen hidden">
     <aside class="sidebar">
-      <div class="brand">brainions Admin</div>
+      <div class="brand">
+        <img src="/admin/logo.png" alt="" class="brand-logo" />
+        <span>brainions Admin</span>
+      </div>
       <nav class="sidebar-nav">
         <button data-tab="dashboard" class="nav-btn active" data-i18n="nav.dashboard">Dashboard</button>
         <button data-tab="listings" class="nav-btn" data-i18n="nav.listings">Listings</button>
+        <button data-tab="groups" class="nav-btn" data-i18n="nav.groups">Groups</button>
+        <button data-tab="reservations" class="nav-btn" data-i18n="nav.reservations">Reservations</button>
+        <button data-tab="conversations" class="nav-btn" data-i18n="nav.conversations">Conversations</button>
         <button data-tab="rules" class="nav-btn" data-i18n="nav.rules">Rules</button>
         <button data-tab="requests" class="nav-btn" data-i18n="nav.requests">Guest requests</button>
         <button data-tab="logs" class="nav-btn" data-i18n="nav.logs">Audit log</button>
@@ -59,12 +69,54 @@
           <button id="sync-btn" class="btn primary" data-i18n="dashboard.syncBtn">Hostaway Sync</button>
         </header>
         <div class="stats" id="stats"></div>
+        <div class="card" id="sync-settings-card">
+          <h3 data-i18n="dashboard.autoSync">Auto sync</h3>
+          <form id="sync-settings-form" class="sync-settings-form">
+            <label class="checkbox-row">
+              <input type="checkbox" id="auto-sync-enabled" />
+              <span data-i18n="dashboard.autoSyncEnable">Enable automatic Hostaway sync</span>
+            </label>
+            <label>
+              <span data-i18n="dashboard.autoSyncInterval">Interval (minutes)</span>
+              <input type="number" id="auto-sync-interval" min="5" max="1440" value="30" />
+            </label>
+            <button type="submit" class="btn primary" data-i18n="dashboard.autoSyncSave">Save settings</button>
+          </form>
+          <p id="auto-sync-hint" class="field-hint"></p>
+        </div>
         <div class="card" id="sync-result"></div>
+        <div class="card">
+          <h3 data-i18n="dashboard.webhookActivity">Hostaway webhook activity</h3>
+          <p class="field-hint" data-i18n="dashboard.webhookHint">When Hostaway sends reservation/listing events, the middleware syncs in the background. Shown here — no popup notification.</p>
+          <div class="table-wrap" id="webhook-activity"></div>
+        </div>
       </section>
 
       <section id="tab-listings" class="tab hidden">
         <header class="page-header"><h2 data-i18n="listings.title">Listings</h2></header>
         <div class="table-wrap" id="listings-table"></div>
+        <div id="listings-pagination" class="pagination"></div>
+      </section>
+
+      <section id="tab-groups" class="tab hidden">
+        <header class="page-header"><h2 data-i18n="nav.groups">Groups</h2></header>
+        <p class="field-hint" data-i18n="groups.hint">Parent/child groups from Hostaway multi-unit API + configured cross-listings.</p>
+        <div class="table-wrap" id="listing-groups-table"></div>
+        <div id="groups-pagination" class="pagination"></div>
+      </section>
+
+      <section id="tab-reservations" class="tab hidden">
+        <header class="page-header"><h2 data-i18n="nav.reservations">Reservations</h2></header>
+        <p class="field-hint" data-i18n="listings.reservationsHint">Full guest contact data for verification. fonio/API guests only see masked data.</p>
+        <div class="table-wrap" id="reservations-table"></div>
+        <div id="reservations-pagination" class="pagination"></div>
+      </section>
+
+      <section id="tab-conversations" class="tab hidden">
+        <header class="page-header"><h2 data-i18n="nav.conversations">Conversations</h2></header>
+        <p class="field-hint" data-i18n="conversations.hint">Conversation IDs are used to forward guest requests to Hostaway inbox. Click View to preview messages.</p>
+        <div class="table-wrap" id="conversations-table"></div>
+        <div id="conversations-pagination" class="pagination"></div>
       </section>
 
       <section id="tab-rules" class="tab hidden">
@@ -140,6 +192,16 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div id="conversation-modal" class="modal-overlay hidden">
+    <div class="modal-card modal-wide">
+      <h4 id="conversation-modal-title">Conversation</h4>
+      <div id="conversation-modal-body" class="conversation-messages"></div>
+      <div class="modal-actions">
+        <button type="button" id="conversation-modal-close" class="btn ghost" data-i18n="common.close">Close</button>
+      </div>
+    </div>
   </div>
 
   <script src="/admin/i18n.js"></script>

@@ -28,6 +28,12 @@ export interface HostawayListing {
   listingAmenities?: { amenityId: number; amenityName: string }[];
 }
 
+export interface HostawayListingUnit {
+  id: number;
+  name: string;
+  listingMapIdUnit?: number | string | null;
+}
+
 export interface HostawayCalendarDay {
   date: string;
   isAvailable: number;
@@ -62,4 +68,6 @@ export interface HostawayConversationMessage {
   id: number;
   body: string;
   communicationType: string;
+  insertedOn?: string;
+  isIncoming?: number;
 }

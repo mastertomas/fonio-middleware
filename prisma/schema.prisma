@@ -135,6 +135,9 @@ model Reservation {
   children           Int?
   pets               Int?
   status             String
+  guestPhone         String?
+  guestEmail         String?
+  guestName          String?
   phoneHash          String?
   emailHash          String?
   guestNameMasked    String?
@@ -230,4 +233,12 @@ model SyncJob {
   finishedAt DateTime?
   error      String?
   metadata   Json?
+}
+
+model SyncSettings {
+  id              String    @id @default("default")
+  autoSyncEnabled Boolean   @default(true)
+  intervalMinutes Int       @default(30)
+  lastAutoSyncAt  DateTime?
+  updatedAt       DateTime  @updatedAt
 }

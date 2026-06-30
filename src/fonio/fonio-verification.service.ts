@@ -54,7 +54,15 @@ export class FonioVerificationService {
 
     if (dto.phone) {
       let phoneVerified = false;
-      if (reservation.phoneHash && hashPhoneForStorage(dto.phone) === reservation.phoneHash) {
+      if (
+        reservation.guestPhone &&
+        phonesMatch(dto.phone, reservation.guestPhone)
+      ) {
+        phoneVerified = true;
+      } else if (
+        reservation.phoneHash &&
+        hashPhoneForStorage(dto.phone) === reservation.phoneHash
+      ) {
         phoneVerified = true;
       } else {
         const remote = await this.hostaway.getReservation(dto.reservationId);
@@ -70,7 +78,15 @@ export class FonioVerificationService {
 
     if (dto.email) {
       let emailVerified = false;
-      if (reservation.emailHash && hashValue(dto.email) === reservation.emailHash) {
+      if (
+        reservation.guestEmail &&
+        dto.email.toLowerCase() === reservation.guestEmail.toLowerCase()
+      ) {
+        emailVerified = true;
+      } else if (
+        reservation.emailHash &&
+        hashValue(dto.email) === reservation.emailHash
+      ) {
         emailVerified = true;
       } else {
         const remote = await this.hostaway.getReservation(dto.reservationId);

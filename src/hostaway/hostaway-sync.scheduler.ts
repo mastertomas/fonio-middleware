@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ConfigService } from '@nestjs/config';
 import { HostawaySyncService } from './hostaway-sync.service';
+import { SyncSettingsService } from './sync-settings.service';
 
 @Injectable()
 export class HostawaySyncScheduler {
@@ -10,12 +10,13 @@ export class HostawaySyncScheduler {
 
   constructor(
     private readonly sync: HostawaySyncService,
-    private readonly config: ConfigService,
+    private readonly syncSettings: SyncSettingsService,
   ) {}
 
-  @Cron(CronExpression.EVERY_30_MINUTES)
+  @Cron(CronExpression.EVERY_MINUTE)
   async handleScheduledSync() {
-    if (this.config.get('SYNC_ENABLED') === 'false') return;
+    const shouldRun = await this.syncSettings.shouldRunAutoSync();
+    if (!shouldRun) return;
     if (this.running) {
       this.logger.warn('Sync already in progress, skipping');
       return;
@@ -23,7 +24,8 @@ export class HostawaySyncScheduler {
 
     this.running = true;
     try {
-      const result = await this.sync.syncAll();
+      const result = await this.sync.syncAll('auto_sync');
+      await this.syncSettings.markAutoSyncCompleted();
       this.logger.log(
         `Scheduled sync completed: ${result.listings} listings, ${result.reservations} reservations`,
       );

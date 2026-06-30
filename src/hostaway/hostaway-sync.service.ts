@@ -1,13 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ListingStatus } from '@prisma/client';
 import { hashPhoneForStorage, hashValue, maskGuestName } from '../common/utils/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { HostawayClient } from './hostaway.client';
-import {
-  EXCLUDED_LISTING_IDS,
-  LISTING_HIERARCHY,
-  resolveParentHostawayId,
-} from './listing-hierarchy.config';
+import { EXCLUDED_LISTING_IDS } from './listing-hierarchy.config';
+import { ListingHierarchyService } from './listing-hierarchy.service';
 
 @Injectable()
 export class HostawaySyncService {
@@ -16,26 +14,36 @@ export class HostawaySyncService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hostaway: HostawayClient,
+    private readonly hierarchy: ListingHierarchyService,
+    private readonly config: ConfigService,
   ) {}
 
-  async syncAll(): Promise<{ listings: number; reservations: number }> {
+  async syncAll(jobType = 'full_sync'): Promise<{
+    listings: number;
+    reservations: number;
+    calendarDays: number;
+    removedListings: number;
+  }> {
     const job = await this.prisma.syncJob.create({
-      data: { jobType: 'full_sync', status: 'running' },
+      data: { jobType, status: 'running' },
     });
 
     try {
-      await this.syncListingGroups();
-      const listings = await this.syncListings();
-      const reservations = await this.syncRecentReservations();
+      const remoteListings = await this.hostaway.getAllListings();
+      await this.syncListingGroups(remoteListings);
+      const listings = await this.syncListings(remoteListings);
+      const removedListings = await this.removeStaleListings(remoteListings);
+      const reservations = await this.syncAllReservations();
+      const calendarDays = await this.syncAllCalendars();
       await this.prisma.syncJob.update({
         where: { id: job.id },
         data: {
           status: 'completed',
           finishedAt: new Date(),
-          metadata: { listings, reservations },
+          metadata: { listings, reservations, calendarDays, removedListings },
         },
       });
-      return { listings, reservations };
+      return { listings, reservations, calendarDays, removedListings };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       await this.prisma.syncJob.update({
@@ -46,8 +54,13 @@ export class HostawaySyncService {
     }
   }
 
-  private async syncListingGroups() {
-    for (const group of LISTING_HIERARCHY) {
+  private async syncListingGroups(
+    remotes?: Awaited<ReturnType<HostawayClient['getAllListings']>>,
+  ) {
+    const remoteListings = remotes ?? (await this.hostaway.getAllListings());
+    const groups = await this.hierarchy.discoverGroups(remoteListings);
+
+    for (const group of groups) {
       await this.prisma.listingGroup.upsert({
         where: { hostawayParentId: group.parentHostawayId },
         create: {
@@ -65,16 +78,18 @@ export class HostawaySyncService {
     }
   }
 
-  async syncListings(): Promise<number> {
-    const remoteListings = await this.hostaway.getListings(100, 0);
+  async syncListings(
+    remotes?: Awaited<ReturnType<HostawayClient['getAllListings']>>,
+  ): Promise<number> {
+    const remoteListings = remotes ?? (await this.hostaway.getAllListings());
     let count = 0;
 
     for (const remote of remoteListings) {
       const tags = (remote.listingTags ?? []).map((t) => t.name);
-      const petsAllowed = (remote.listingAmenities ?? []).some(
-        (a) => a.amenityName.toLowerCase().includes('pet'),
+      const petsAllowed = (remote.listingAmenities ?? []).some((a) =>
+        a.amenityName.toLowerCase().includes('pet'),
       );
-      const parentHostawayId = resolveParentHostawayId(remote.id);
+      const parentHostawayId = this.hierarchy.resolveParent(remote.id);
       const group = parentHostawayId
         ? await this.prisma.listingGroup.findUnique({
             where: { hostawayParentId: parentHostawayId },
@@ -127,6 +142,29 @@ export class HostawaySyncService {
     return count;
   }
 
+  private async removeStaleListings(
+    remotes: Awaited<ReturnType<HostawayClient['getAllListings']>>,
+  ): Promise<number> {
+    const remoteIds = new Set(remotes.map((l) => l.id));
+    const local = await this.prisma.listing.findMany({
+      select: { id: true, hostawayId: true, status: true },
+    });
+    let removed = 0;
+    for (const listing of local) {
+      if (!remoteIds.has(listing.hostawayId) && listing.status !== ListingStatus.HIDDEN) {
+        await this.prisma.listing.update({
+          where: { id: listing.id },
+          data: { status: ListingStatus.HIDDEN, isBookable: false },
+        });
+        removed++;
+      }
+    }
+    if (removed > 0) {
+      this.logger.log(`Marked ${removed} removed Hostaway listings as hidden`);
+    }
+    return removed;
+  }
+
   async syncListingCalendar(
     hostawayListingId: number,
     startDate: string,
@@ -168,20 +206,58 @@ export class HostawaySyncService {
     return days.length;
   }
 
+  private async syncAllCalendars(): Promise<number> {
+    const daysAhead = Number(this.config.get('CALENDAR_SYNC_DAYS') ?? 365);
+    const listings = await this.prisma.listing.findMany({
+      where: { isBookable: true },
+    });
+    const today = new Date();
+    const end = new Date(today);
+    end.setDate(end.getDate() + daysAhead);
+    const format = (d: Date) => d.toISOString().slice(0, 10);
+    let total = 0;
+
+    for (const listing of listings) {
+      try {
+        total += await this.syncListingCalendar(
+          listing.hostawayId,
+          format(today),
+          format(end),
+        );
+        await this.sleep(250);
+      } catch (error) {
+        this.logger.warn(
+          `Calendar sync failed for listing ${listing.hostawayId}: ${error instanceof Error ? error.message : error}`,
+        );
+      }
+    }
+
+    this.logger.log(`Synced ${total} calendar days across ${listings.length} listings`);
+    return total;
+  }
+
+  async syncAllReservations(): Promise<number> {
+    const reservations = await this.hostaway.getAllReservations({});
+    return this.upsertReservations(reservations);
+  }
+
   async syncRecentReservations(): Promise<number> {
     const today = new Date();
     const past = new Date(today);
     past.setDate(past.getDate() - 7);
     const future = new Date(today);
     future.setDate(future.getDate() + 180);
-
     const format = (d: Date) => d.toISOString().slice(0, 10);
-    const reservations = await this.hostaway.getReservations({
-      limit: 100,
+    const reservations = await this.hostaway.getAllReservations({
       arrivalStartDate: format(past),
       arrivalEndDate: format(future),
     });
+    return this.upsertReservations(reservations);
+  }
 
+  private async upsertReservations(
+    reservations: Awaited<ReturnType<HostawayClient['getAllReservations']>>,
+  ): Promise<number> {
     let count = 0;
     for (const remote of reservations) {
       const listing = await this.prisma.listing.findUnique({
@@ -204,6 +280,9 @@ export class HostawaySyncService {
           children: remote.children,
           pets: remote.pets,
           status: remote.status,
+          guestPhone: remote.phone?.trim() || null,
+          guestEmail: remote.guestEmail?.trim() || null,
+          guestName: remote.guestName?.trim() || null,
           phoneHash: remote.phone ? hashPhoneForStorage(remote.phone) : null,
           emailHash: remote.guestEmail
             ? hashValue(remote.guestEmail)
@@ -227,6 +306,9 @@ export class HostawaySyncService {
           children: remote.children,
           pets: remote.pets,
           status: remote.status,
+          guestPhone: remote.phone?.trim() || null,
+          guestEmail: remote.guestEmail?.trim() || null,
+          guestName: remote.guestName?.trim() || null,
           phoneHash: remote.phone ? hashPhoneForStorage(remote.phone) : null,
           emailHash: remote.guestEmail
             ? hashValue(remote.guestEmail)
@@ -249,6 +331,59 @@ export class HostawaySyncService {
     return count;
   }
 
+  async refreshReservationConversation(hostawayReservationId: number) {
+    const conversationId =
+      await this.hostaway.findConversationByReservation(hostawayReservationId);
+    if (!conversationId) {
+      return { hostawayConversationId: null, messages: [] };
+    }
+
+    await this.prisma.reservation.update({
+      where: { hostawayId: hostawayReservationId },
+      data: { hostawayConversationId: conversationId, lastSyncedAt: new Date() },
+    });
+
+    const messages = await this.hostaway.getConversationMessages(conversationId, 10);
+    return { hostawayConversationId: conversationId, messages };
+  }
+
+  async syncFromWebhook(
+    event: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<{ listings: number; reservations: number }> {
+    const job = await this.prisma.syncJob.create({
+      data: { jobType: `webhook:${event}`, status: 'running' },
+    });
+
+    try {
+      let listings = 0;
+      let reservations = 0;
+      const normalized = event.toLowerCase();
+      if (normalized.includes('reservation')) {
+        reservations = await this.syncRecentReservations();
+      }
+      if (normalized.includes('listing')) {
+        listings = await this.syncListings();
+      }
+      await this.prisma.syncJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'completed',
+          finishedAt: new Date(),
+          metadata: { listings, reservations, ...metadata },
+        },
+      });
+      return { listings, reservations };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      await this.prisma.syncJob.update({
+        where: { id: job.id },
+        data: { status: 'failed', finishedAt: new Date(), error: message },
+      });
+      throw error;
+    }
+  }
+
   private mapListingStatus(specialStatus: string | null): ListingStatus {
     if (!specialStatus) return ListingStatus.LIVE;
     const normalized = specialStatus.toLowerCase();
@@ -257,10 +392,15 @@ export class HostawaySyncService {
     }
     if (
       normalized.includes('hidden') ||
-      normalized.includes('ausgeblendet')
+      normalized.includes('ausgeblendet') ||
+      normalized.includes('archived')
     ) {
       return ListingStatus.HIDDEN;
     }
     return ListingStatus.UNKNOWN;
+  }
+
+  private sleep(ms: number) {
+    return new Promise((r) => setTimeout(r, ms));
   }
 }

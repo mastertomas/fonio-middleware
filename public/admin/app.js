@@ -6,6 +6,8 @@ let activeTab = 'dashboard';
 let cachedRules = [];
 let cachedListings = [];
 let editingRuleId = null;
+let dashboardPoll = null;
+const pageState = { listings: 1, groups: 1, reservations: 1, conversations: 1 };
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
@@ -37,9 +39,13 @@ function showApp() {
 }
 
 function refreshActiveTab() {
+  manageDashboardPoll();
   const loaders = {
     dashboard: loadDashboard,
     listings: loadListings,
+    groups: loadGroups,
+    reservations: loadReservations,
+    conversations: loadConversations,
     rules: loadRules,
     requests: loadRequests,
     logs: loadLogs,
@@ -47,6 +53,33 @@ function refreshActiveTab() {
   };
   updateRuleSelects();
   loaders[activeTab]?.();
+}
+
+function manageDashboardPoll() {
+  if (dashboardPoll) clearInterval(dashboardPoll);
+  dashboardPoll = null;
+  if (activeTab === 'dashboard' && token) {
+    dashboardPoll = setInterval(() => {
+      if (activeTab === 'dashboard') loadDashboard();
+    }, 15000);
+  }
+}
+
+function renderPagination(containerId, data, tabKey, loader) {
+  const el = $(containerId);
+  if (!el || !data) return;
+  const { page, totalPages, total } = data;
+  el.innerHTML = `
+    <button type="button" class="btn ghost" data-page="prev" ${page <= 1 ? 'disabled' : ''}>←</button>
+    <span class="page-info">${t('pagination.info', { page, totalPages, total })}</span>
+    <button type="button" class="btn ghost" data-page="next" ${page >= totalPages ? 'disabled' : ''}>→</button>
+  `;
+  el.querySelector('[data-page="prev"]')?.addEventListener('click', () => {
+    if (page > 1) { pageState[tabKey] = page - 1; loader(); }
+  });
+  el.querySelector('[data-page="next"]')?.addEventListener('click', () => {
+    if (page < totalPages) { pageState[tabKey] = page + 1; loader(); }
+  });
 }
 
 function updateRuleSelects() {
@@ -114,6 +147,23 @@ $$('.nav-btn').forEach((btn) => {
     $(`#tab-${btn.dataset.tab}`).classList.remove('hidden');
     refreshActiveTab();
   });
+});
+
+$('#sync-settings-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await api('/sync/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        autoSyncEnabled: $('#auto-sync-enabled').checked,
+        intervalMinutes: Number($('#auto-sync-interval').value),
+      }),
+    });
+    notify.success(t('dashboard.autoSyncSaved'));
+    loadDashboard();
+  } catch (ex) {
+    notify.error(ex.message);
+  }
 });
 
 $('#sync-btn').addEventListener('click', async () => {
@@ -231,23 +281,51 @@ function bindRuleRowClicks() {
 }
 
 async function loadDashboard() {
-  const status = await api('/sync/status');
+  const [status, webhooks] = await Promise.all([
+    api('/sync/status'),
+    api('/sync/webhook-activity'),
+  ]);
   const last = status.last;
+  const settings = status.settings;
   $('#stats').innerHTML = `
     <div class="stat-card"><div class="value">${status.listingCount}</div><div class="label">${t('dashboard.listings')}</div></div>
     <div class="stat-card"><div class="value">${status.reservationCount}</div><div class="label">${t('dashboard.reservations')}</div></div>
     <div class="stat-card"><div class="value">${last?.status || '–'}</div><div class="label">${t('dashboard.lastSync')}</div></div>
     <div class="stat-card"><div class="value">${last?.finishedAt ? new Date(last.finishedAt).toLocaleString(locale()) : '–'}</div><div class="label">${t('dashboard.syncTime')}</div></div>
   `;
+  $('#auto-sync-enabled').checked = settings?.autoSyncEnabled ?? true;
+  $('#auto-sync-interval').value = settings?.intervalMinutes ?? 30;
+  $('#auto-sync-hint').textContent = settings?.autoSyncEnabled
+    ? t('dashboard.autoSyncNext', { minutes: settings.intervalMinutes })
+    : t('dashboard.autoSyncOff');
+  const whRows = webhooks.map((w) => {
+    const meta = w.metadata || {};
+    const result = w.status === 'completed'
+      ? `${meta.listings ?? 0} ${t('dashboard.listings')}, ${meta.reservations ?? 0} ${t('dashboard.reservations')}`
+      : w.error || w.status;
+    return `<tr>
+      <td>${new Date(w.startedAt).toLocaleString(locale())}</td>
+      <td>${esc(w.jobType.replace('webhook:', ''))}</td>
+      <td>${esc(String(result))}</td>
+    </tr>`;
+  }).join('');
+  $('#webhook-activity').innerHTML = `
+    <table><thead><tr>
+      <th>${t('dashboard.webhookCol.time')}</th>
+      <th>${t('dashboard.webhookCol.event')}</th>
+      <th>${t('dashboard.webhookCol.result')}</th>
+    </tr></thead>
+    <tbody>${whRows || `<tr><td colspan="3">${t('dashboard.webhookEmpty')}</td></tr>`}</tbody></table>`;
 }
 
 async function loadListings() {
-  const listings = await api('/listings');
-  const rows = listings.map((l) => `
+  const data = await api(`/listings?page=${pageState.listings}&pageSize=25`);
+  const rows = data.items.map((l) => `
     <tr>
       <td>${l.hostawayId}</td>
       <td>${esc(l.name)}</td>
       <td>${esc(l.city || '–')}</td>
+      <td>${esc(l.listingGroup?.name || '–')}</td>
       <td>${l.personCapacity}</td>
       <td><span class="badge live">${l.status}</span></td>
       <td>${l.isBookable ? t('common.yes') : t('common.no')}</td>
@@ -256,18 +334,140 @@ async function loadListings() {
   $('#listings-table').innerHTML = `
     <table><thead><tr>
       <th>${t('listings.id')}</th><th>${t('listings.name')}</th><th>${t('listings.city')}</th>
-      <th>${t('listings.guests')}</th><th>${t('listings.status')}</th><th>${t('listings.bookable')}</th>
-    </tr></thead><tbody>${rows}</tbody></table>`;
+      <th>${t('listings.group')}</th><th>${t('listings.guests')}</th><th>${t('listings.status')}</th><th>${t('listings.bookable')}</th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="7">–</td></tr>`}</tbody></table>`;
+  renderPagination('#listings-pagination', data, 'listings', loadListings);
 }
 
+async function loadGroups() {
+  const data = await api(`/listing-groups?page=${pageState.groups}&pageSize=25`);
+  const rows = data.items.map((g) => `
+    <tr>
+      <td>${g.hostawayParentId}</td>
+      <td>${esc(g.name)}</td>
+      <td>${esc(g.city || '–')}</td>
+      <td>${g.availabilityMode}</td>
+      <td>${g.listings?.length ?? 0}</td>
+      <td>${(g.listings || []).map((l) => esc(l.name)).join(', ') || '–'}</td>
+    </tr>
+  `).join('');
+  $('#listing-groups-table').innerHTML = `
+    <table><thead><tr>
+      <th>ID</th><th>${t('listings.name')}</th><th>${t('listings.city')}</th>
+      <th>Mode</th><th>#</th><th>${t('listings.title')}</th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="6">–</td></tr>`}</tbody></table>`;
+  renderPagination('#groups-pagination', data, 'groups', loadGroups);
+}
+
+async function loadReservations() {
+  const data = await api(`/reservations?page=${pageState.reservations}&pageSize=25`);
+  const rows = data.items.map((r) => `
+    <tr>
+      <td>${r.hostawayId}</td>
+      <td>${esc(r.guestName || r.guestNameMasked || '–')}</td>
+      <td>${esc(r.guestPhone || '–')}</td>
+      <td>${esc(r.guestEmail || '–')}</td>
+      <td>${esc(r.listing?.name || '–')}</td>
+      <td>${esc(r.listing?.listingGroup?.name || '–')}</td>
+      <td>${r.arrivalDate?.slice(0, 10)}</td>
+      <td>${r.departureDate?.slice(0, 10)}</td>
+      <td>${r.status}</td>
+    </tr>
+  `).join('');
+  $('#reservations-table').innerHTML = `
+    <table><thead><tr>
+      <th>ID</th><th>${t('listings.guest')}</th><th>${t('listings.phone')}</th><th>${t('listings.email')}</th>
+      <th>${t('listings.name')}</th><th>${t('listings.group')}</th>
+      <th>${t('listings.arrival')}</th><th>${t('listings.departure')}</th><th>${t('listings.status')}</th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="9">–</td></tr>`}</tbody></table>`;
+  renderPagination('#reservations-pagination', data, 'reservations', loadReservations);
+}
+
+async function loadConversations() {
+  const data = await api(`/reservations?page=${pageState.conversations}&pageSize=25`);
+  const rows = data.items.map((r) => `
+    <tr>
+      <td>${r.hostawayId}</td>
+      <td>${esc(r.guestName || '–')}</td>
+      <td>${esc(r.listing?.name || '–')}</td>
+      <td>${r.hostawayConversationId ?? '–'}</td>
+      <td>${r.lastSyncedAt ? new Date(r.lastSyncedAt).toLocaleString(locale()) : '–'}</td>
+      <td>
+        <button type="button" class="btn ghost btn-sm" data-view-conv="${r.hostawayId}">${t('conversations.view')}</button>
+        <button type="button" class="btn ghost btn-sm" data-refresh-conv="${r.hostawayId}">${t('conversations.refresh')}</button>
+      </td>
+    </tr>
+  `).join('');
+  $('#conversations-table').innerHTML = `
+    <table><thead><tr>
+      <th>ID</th><th>${t('listings.guest')}</th><th>${t('listings.name')}</th>
+      <th>${t('listings.conversation')}</th><th>${t('conversations.synced')}</th><th></th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="6">–</td></tr>`}</tbody></table>`;
+  renderPagination('#conversations-pagination', data, 'conversations', loadConversations);
+  bindConversationButtons();
+}
+
+function bindConversationButtons() {
+  $$('[data-view-conv]').forEach((btn) => {
+    btn.addEventListener('click', () => openConversationModal(btn.dataset.viewConv));
+  });
+  $$('[data-refresh-conv]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        const result = await api(`/reservations/${btn.dataset.refreshConv}/refresh-conversation`, { method: 'POST' });
+        notify.success(t('conversations.refreshed', { id: result.hostawayConversationId || '–' }));
+        loadConversations();
+      } catch (ex) {
+        notify.error(ex.message);
+      }
+    });
+  });
+}
+
+async function openConversationModal(hostawayId) {
+  const modal = $('#conversation-modal');
+  const body = $('#conversation-modal-body');
+  $('#conversation-modal-title').textContent = `${t('nav.conversations')} #${hostawayId}`;
+  body.innerHTML = `<p>${t('dashboard.syncRunning')}</p>`;
+  modal.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  try {
+    const result = await api(`/reservations/${hostawayId}/conversation`);
+    if (!result.hostawayConversationId) {
+      body.innerHTML = `<p class="field-hint">${t('conversations.none')}</p>`;
+      return;
+    }
+    const msgs = (result.messages || []).map((m) => `
+      <div class="conversation-msg">
+        <div class="meta">${m.communicationType || 'channel'} · ${m.insertedOn || ''}</div>
+        <div>${esc(m.body || '')}</div>
+      </div>
+    `).join('');
+    body.innerHTML = `<p><strong>${t('listings.conversation')}:</strong> ${result.hostawayConversationId}</p>${msgs || `<p>${t('conversations.noMessages')}</p>`}`;
+  } catch (ex) {
+    body.innerHTML = `<p class="error">${esc(ex.message)}</p>`;
+  }
+}
+
+$('#conversation-modal-close').addEventListener('click', () => {
+  $('#conversation-modal').classList.add('hidden');
+  document.body.classList.remove('modal-open');
+});
+$('#conversation-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'conversation-modal') {
+    $('#conversation-modal').classList.add('hidden');
+    document.body.classList.remove('modal-open');
+  }
+});
+
 async function loadRules() {
-  const [rules, config, listings] = await Promise.all([
+  const [rules, config, listingsData] = await Promise.all([
     api('/rules'),
     api('/verification-config'),
-    api('/listings'),
+    api('/listings?pageSize=100'),
   ]);
   cachedRules = rules;
-  cachedListings = listings;
+  cachedListings = listingsData.items || listingsData;
   populateListingSelect();
 
   const rows = rules.map((r) => `

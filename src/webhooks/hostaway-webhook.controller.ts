@@ -29,18 +29,20 @@ export class HostawayWebhookController {
   ) {
     this.assertWebhookAuth(authorization);
 
-    const event = String(body.event ?? body.object ?? 'unknown');
+    const event = String(
+      body.event ?? body.object ?? body.type ?? 'unknown',
+    ).toLowerCase();
     await this.audit.log({
       source: 'hostaway_webhook',
       action: event,
       metadata: { event, objectId: body.id ?? body.objectId },
     });
 
-    if (event.includes('reservation')) {
-      await this.sync.syncRecentReservations();
-    }
-    if (event.includes('listing')) {
-      await this.sync.syncListings();
+    if (event.includes('reservation') || event.includes('listing')) {
+      await this.sync.syncFromWebhook(event, {
+        event,
+        objectId: body.id ?? body.objectId,
+      });
     }
 
     return { received: true, event };
