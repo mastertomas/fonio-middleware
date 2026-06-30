@@ -7,7 +7,18 @@ let cachedRules = [];
 let cachedListings = [];
 let editingRuleId = null;
 let dashboardPoll = null;
-const pageState = { listings: 1, groups: 1, reservations: 1, conversations: 1 };
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const tableState = {
+  listings: { page: 1, pageSize: 10, search: '' },
+  groups: { page: 1, pageSize: 10, search: '' },
+  reservations: { page: 1, pageSize: 10, search: '' },
+  conversations: { page: 1, pageSize: 10, search: '' },
+  rules: { page: 1, pageSize: 10, search: '' },
+  requests: { page: 1, pageSize: 10, search: '' },
+  logs: { page: 1, pageSize: 10, search: '' },
+  webhooks: { page: 1, pageSize: 10, search: '' },
+};
+const searchTimers = {};
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
@@ -65,21 +76,192 @@ function manageDashboardPoll() {
   }
 }
 
+function tableQuery(tabKey) {
+  const s = tableState[tabKey];
+  const params = new URLSearchParams();
+  params.set('page', String(s.page));
+  params.set('pageSize', String(s.pageSize));
+  if (s.search.trim()) params.set('search', s.search.trim());
+  return params.toString();
+}
+
+function renderTableToolbar(toolbarId, tabKey, loader) {
+  const el = $(toolbarId);
+  if (!el) return;
+  const s = tableState[tabKey];
+  el.innerHTML = `
+    <div class="table-length">
+      <label>
+        ${t('table.show')}
+        <select data-table-length="${tabKey}">
+          ${PAGE_SIZE_OPTIONS.map((n) =>
+            `<option value="${n}"${n === s.pageSize ? ' selected' : ''}>${n}</option>`,
+          ).join('')}
+        </select>
+        ${t('table.entries')}
+      </label>
+    </div>
+    <div class="table-filter">
+      <label>
+        ${t('table.search')}
+        <input type="search" data-table-search="${tabKey}" value="${esc(s.search)}" autocomplete="off" />
+      </label>
+    </div>
+  `;
+  el.querySelector(`[data-table-length="${tabKey}"]`)?.addEventListener('change', (e) => {
+    tableState[tabKey].pageSize = Number(e.target.value);
+    tableState[tabKey].page = 1;
+    loader();
+  });
+  el.querySelector(`[data-table-search="${tabKey}"]`)?.addEventListener('input', (e) => {
+    clearTimeout(searchTimers[tabKey]);
+    searchTimers[tabKey] = setTimeout(() => {
+      tableState[tabKey].search = e.target.value;
+      tableState[tabKey].page = 1;
+      loader();
+    }, 300);
+  });
+}
+
+function renderTableInfo(infoId, data, maxTotal) {
+  const el = $(infoId);
+  if (!el || !data) return;
+  const { page, pageSize, total } = data;
+  if (!total) {
+    el.textContent = t('table.infoEmpty');
+    return;
+  }
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  if (maxTotal && maxTotal > total) {
+    el.textContent = t('table.infoFiltered', { start, end, total, max: maxTotal });
+  } else {
+    el.textContent = t('table.info', { start, end, total });
+  }
+}
+
+function buildPageList(page, totalPages) {
+  if (totalPages <= 1) return [1];
+  const pages = new Set([1, totalPages]);
+  for (let i = page - 2; i <= page + 2; i += 1) {
+    if (i >= 1 && i <= totalPages) pages.add(i);
+  }
+  const sorted = [...pages].sort((a, b) => a - b);
+  const result = [];
+  for (let i = 0; i < sorted.length; i += 1) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) result.push('…');
+    result.push(sorted[i]);
+  }
+  return result;
+}
+
 function renderPagination(containerId, data, tabKey, loader) {
   const el = $(containerId);
   if (!el || !data) return;
-  const { page, totalPages, total } = data;
+  const { page, totalPages } = data;
+  const pages = buildPageList(page, totalPages);
   el.innerHTML = `
-    <button type="button" class="btn ghost" data-page="prev" ${page <= 1 ? 'disabled' : ''}>←</button>
-    <span class="page-info">${t('pagination.info', { page, totalPages, total })}</span>
-    <button type="button" class="btn ghost" data-page="next" ${page >= totalPages ? 'disabled' : ''}>→</button>
+    <div class="paginate" role="navigation" aria-label="Pagination">
+      <button type="button" class="page-btn prev" data-page="prev" ${page <= 1 ? 'disabled' : ''} aria-label="Previous">‹</button>
+      ${pages.map((p) => {
+        if (p === '…') return `<span class="page-btn ellipsis">…</span>`;
+        return `<button type="button" class="page-btn${p === page ? ' active' : ''}" data-page="${p}">${p}</button>`;
+      }).join('')}
+      <button type="button" class="page-btn next" data-page="next" ${page >= totalPages ? 'disabled' : ''} aria-label="Next">›</button>
+    </div>
   `;
   el.querySelector('[data-page="prev"]')?.addEventListener('click', () => {
-    if (page > 1) { pageState[tabKey] = page - 1; loader(); }
+    if (page > 1) { tableState[tabKey].page = page - 1; loader(); }
   });
   el.querySelector('[data-page="next"]')?.addEventListener('click', () => {
-    if (page < totalPages) { pageState[tabKey] = page + 1; loader(); }
+    if (page < totalPages) { tableState[tabKey].page = page + 1; loader(); }
   });
+  el.querySelectorAll('[data-page]').forEach((btn) => {
+    if (btn.dataset.page === 'prev' || btn.dataset.page === 'next') return;
+    btn.addEventListener('click', () => {
+      tableState[tabKey].page = Number(btn.dataset.page);
+      loader();
+    });
+  });
+}
+
+function paginateClient(items, tabKey, searchFields) {
+  const { page, pageSize, search } = tableState[tabKey];
+  const q = search.trim().toLowerCase();
+  let filtered = items;
+  if (q) {
+    filtered = items.filter((item) => {
+      const haystack = searchFields(item).toLowerCase();
+      return haystack.includes(q);
+    });
+  }
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, totalPages);
+  if (safePage !== page) tableState[tabKey].page = safePage;
+  const start = (safePage - 1) * pageSize;
+  return {
+    items: filtered.slice(start, start + pageSize),
+    total,
+    page: safePage,
+    pageSize,
+    totalPages,
+    maxTotal: items.length,
+  };
+}
+
+function channelLabel(type) {
+  const key = String(type || '').toLowerCase();
+  if (key.includes('email')) return t('conversations.channel.email');
+  if (key.includes('sms')) return t('conversations.channel.sms');
+  return t('conversations.channel.message');
+}
+
+function looksLikeHtml(text) {
+  return /<[a-z][\s\S]*>/i.test(text);
+}
+
+function sanitizeHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('script,iframe,object,embed,form,style').forEach((el) => el.remove());
+  doc.body.querySelectorAll('*').forEach((el) => {
+    [...el.attributes].forEach((attr) => {
+      if (attr.name.startsWith('on') || attr.name === 'style') el.removeAttribute(attr.name);
+    });
+    if (el.tagName === 'A') {
+      el.setAttribute('target', '_blank');
+      el.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+  return doc.body.innerHTML;
+}
+
+function formatMessageContent(message) {
+  const raw = (message.emailFormatted || message.body || '').trim();
+  if (!raw) return '<span class="muted">–</span>';
+  if (looksLikeHtml(raw)) return sanitizeHtml(raw);
+  return esc(raw).replace(/\n/g, '<br>');
+}
+
+function formatMessageDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleString(locale());
+}
+
+function renderConversationMessage(message) {
+  const incoming = message.isIncoming === 1;
+  const direction = incoming ? t('conversations.incoming') : t('conversations.outgoing');
+  return `
+    <div class="conversation-msg ${incoming ? 'incoming' : 'outgoing'}">
+      <div class="meta">
+        <span class="channel">${channelLabel(message.communicationType)}</span>
+        <span>${direction}</span>
+        <span>${formatMessageDate(message.insertedOn)}</span>
+      </div>
+      <div class="message-body">${formatMessageContent(message)}</div>
+    </div>
+  `;
 }
 
 function updateRuleSelects() {
@@ -298,7 +480,16 @@ async function loadDashboard() {
   $('#auto-sync-hint').textContent = settings?.autoSyncEnabled
     ? t('dashboard.autoSyncNext', { minutes: settings.intervalMinutes })
     : t('dashboard.autoSyncOff');
-  const whRows = webhooks.map((w) => {
+
+  renderTableToolbar('#webhooks-toolbar', 'webhooks', loadDashboard);
+  const webhookData = paginateClient(webhooks, 'webhooks', (w) => [
+    w.startedAt,
+    w.jobType,
+    w.status,
+    JSON.stringify(w.metadata || {}),
+    w.error || '',
+  ].join(' '));
+  const whRows = webhookData.items.map((w) => {
     const meta = w.metadata || {};
     const result = w.status === 'completed'
       ? `${meta.listings ?? 0} ${t('dashboard.listings')}, ${meta.reservations ?? 0} ${t('dashboard.reservations')}`
@@ -316,10 +507,13 @@ async function loadDashboard() {
       <th>${t('dashboard.webhookCol.result')}</th>
     </tr></thead>
     <tbody>${whRows || `<tr><td colspan="3">${t('dashboard.webhookEmpty')}</td></tr>`}</tbody></table>`;
+  renderTableInfo('#webhooks-info', webhookData, webhookData.maxTotal);
+  renderPagination('#webhooks-pagination', webhookData, 'webhooks', loadDashboard);
 }
 
 async function loadListings() {
-  const data = await api(`/listings?page=${pageState.listings}&pageSize=25`);
+  renderTableToolbar('#listings-toolbar', 'listings', loadListings);
+  const data = await api(`/listings?${tableQuery('listings')}`);
   const rows = data.items.map((l) => `
     <tr>
       <td>${l.hostawayId}</td>
@@ -335,12 +529,14 @@ async function loadListings() {
     <table><thead><tr>
       <th>${t('listings.id')}</th><th>${t('listings.name')}</th><th>${t('listings.city')}</th>
       <th>${t('listings.group')}</th><th>${t('listings.guests')}</th><th>${t('listings.status')}</th><th>${t('listings.bookable')}</th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="7">–</td></tr>`}</tbody></table>`;
+    </tr></thead><tbody>${rows || `<tr><td colspan="7">${t('table.infoEmpty')}</td></tr>`}</tbody></table>`;
+  renderTableInfo('#listings-info', data);
   renderPagination('#listings-pagination', data, 'listings', loadListings);
 }
 
 async function loadGroups() {
-  const data = await api(`/listing-groups?page=${pageState.groups}&pageSize=25`);
+  renderTableToolbar('#groups-toolbar', 'groups', loadGroups);
+  const data = await api(`/listing-groups?${tableQuery('groups')}`);
   const rows = data.items.map((g) => `
     <tr>
       <td>${g.hostawayParentId}</td>
@@ -355,12 +551,14 @@ async function loadGroups() {
     <table><thead><tr>
       <th>ID</th><th>${t('listings.name')}</th><th>${t('listings.city')}</th>
       <th>Mode</th><th>#</th><th>${t('listings.title')}</th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="6">–</td></tr>`}</tbody></table>`;
+    </tr></thead><tbody>${rows || `<tr><td colspan="6">${t('table.infoEmpty')}</td></tr>`}</tbody></table>`;
+  renderTableInfo('#groups-info', data);
   renderPagination('#groups-pagination', data, 'groups', loadGroups);
 }
 
 async function loadReservations() {
-  const data = await api(`/reservations?page=${pageState.reservations}&pageSize=25`);
+  renderTableToolbar('#reservations-toolbar', 'reservations', loadReservations);
+  const data = await api(`/reservations?${tableQuery('reservations')}`);
   const rows = data.items.map((r) => `
     <tr>
       <td>${r.hostawayId}</td>
@@ -379,12 +577,14 @@ async function loadReservations() {
       <th>ID</th><th>${t('listings.guest')}</th><th>${t('listings.phone')}</th><th>${t('listings.email')}</th>
       <th>${t('listings.name')}</th><th>${t('listings.group')}</th>
       <th>${t('listings.arrival')}</th><th>${t('listings.departure')}</th><th>${t('listings.status')}</th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="9">–</td></tr>`}</tbody></table>`;
+    </tr></thead><tbody>${rows || `<tr><td colspan="9">${t('table.infoEmpty')}</td></tr>`}</tbody></table>`;
+  renderTableInfo('#reservations-info', data);
   renderPagination('#reservations-pagination', data, 'reservations', loadReservations);
 }
 
 async function loadConversations() {
-  const data = await api(`/reservations?page=${pageState.conversations}&pageSize=25`);
+  renderTableToolbar('#conversations-toolbar', 'conversations', loadConversations);
+  const data = await api(`/reservations?${tableQuery('conversations')}`);
   const rows = data.items.map((r) => `
     <tr>
       <td>${r.hostawayId}</td>
@@ -402,7 +602,8 @@ async function loadConversations() {
     <table><thead><tr>
       <th>ID</th><th>${t('listings.guest')}</th><th>${t('listings.name')}</th>
       <th>${t('listings.conversation')}</th><th>${t('conversations.synced')}</th><th></th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="6">–</td></tr>`}</tbody></table>`;
+    </tr></thead><tbody>${rows || `<tr><td colspan="6">${t('table.infoEmpty')}</td></tr>`}</tbody></table>`;
+  renderTableInfo('#conversations-info', data);
   renderPagination('#conversations-pagination', data, 'conversations', loadConversations);
   bindConversationButtons();
 }
@@ -437,13 +638,10 @@ async function openConversationModal(hostawayId) {
       body.innerHTML = `<p class="field-hint">${t('conversations.none')}</p>`;
       return;
     }
-    const msgs = (result.messages || []).map((m) => `
-      <div class="conversation-msg">
-        <div class="meta">${m.communicationType || 'channel'} · ${m.insertedOn || ''}</div>
-        <div>${esc(m.body || '')}</div>
-      </div>
-    `).join('');
-    body.innerHTML = `<p><strong>${t('listings.conversation')}:</strong> ${result.hostawayConversationId}</p>${msgs || `<p>${t('conversations.noMessages')}</p>`}`;
+    const msgs = (result.messages || []).map((m) => renderConversationMessage(m)).join('');
+    body.innerHTML = `
+      <p><strong>${t('listings.conversation')}:</strong> ${result.hostawayConversationId}</p>
+      ${msgs || `<p>${t('conversations.noMessages')}</p>`}`;
   } catch (ex) {
     body.innerHTML = `<p class="error">${esc(ex.message)}</p>`;
   }
@@ -470,7 +668,15 @@ async function loadRules() {
   cachedListings = listingsData.items || listingsData;
   populateListingSelect();
 
-  const rows = rules.map((r) => `
+  renderTableToolbar('#rules-toolbar', 'rules', loadRules);
+  const data = paginateClient(rules, 'rules', (r) => [
+    r.requestType,
+    r.mode,
+    r.listing?.name,
+    r.priority,
+    r.isActive,
+  ].join(' '));
+  const rows = data.items.map((r) => `
     <tr data-rule-id="${r.id}">
       <td>${t(`requestType.${r.requestType}`) || r.requestType}</td>
       <td><span class="badge ${r.mode === 'AUTO' ? 'auto' : r.mode === 'DENY' ? 'manual' : 'manual'}">${t(`mode.${r.mode}`) || r.mode}</span></td>
@@ -484,6 +690,8 @@ async function loadRules() {
       <th>${t('rules.col.type')}</th><th>${t('rules.col.mode')}</th><th>${t('rules.col.listing')}</th>
       <th>${t('rules.col.priority')}</th><th>${t('rules.col.status')}</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="5">${t('rules.none')}</td></tr>`}</tbody></table>`;
+  renderTableInfo('#rules-info', data, data.maxTotal);
+  renderPagination('#rules-pagination', data, 'rules', loadRules);
   $('#verification-config').innerHTML = config ? `
     <h3>${t('rules.verification')}</h3>
     <p>${t('rules.requiredFields')} <code>${(config.requiredFields || []).join(', ')}</code></p>
@@ -501,7 +709,15 @@ async function loadRules() {
 
 async function loadRequests() {
   const requests = await api('/guest-requests');
-  const rows = requests.map((r) => `
+  renderTableToolbar('#requests-toolbar', 'requests', loadRequests);
+  const data = paginateClient(requests, 'requests', (r) => [
+    r.createdAt,
+    r.requestType,
+    r.status,
+    r.reservation?.listing?.name,
+    r.forwardedToHostaway,
+  ].join(' '));
+  const rows = data.items.map((r) => `
     <tr>
       <td>${new Date(r.createdAt).toLocaleString(locale())}</td>
       <td>${t(`requestType.${r.requestType}`) || r.requestType}</td>
@@ -516,11 +732,20 @@ async function loadRequests() {
       <th>${t('requests.listing')}</th><th>${t('requests.hostaway')}</th>
     </tr></thead>
     <tbody>${rows || `<tr><td colspan="5">${t('requests.none')}</td></tr>`}</tbody></table>`;
+  renderTableInfo('#requests-info', data, data.maxTotal);
+  renderPagination('#requests-pagination', data, 'requests', loadRequests);
 }
 
 async function loadLogs() {
   const logs = await api('/logs');
-  const rows = logs.map((l) => `
+  renderTableToolbar('#logs-toolbar', 'logs', loadLogs);
+  const data = paginateClient(logs, 'logs', (l) => [
+    l.createdAt,
+    l.source,
+    l.action,
+    l.statusCode,
+  ].join(' '));
+  const rows = data.items.map((l) => `
     <tr>
       <td>${new Date(l.createdAt).toLocaleString(locale())}</td>
       <td>${l.source}</td>
@@ -532,6 +757,8 @@ async function loadLogs() {
     <table><thead><tr>
       <th>${t('logs.time')}</th><th>${t('logs.source')}</th><th>${t('logs.action')}</th><th>${t('logs.status')}</th>
     </tr></thead><tbody>${rows}</tbody></table>`;
+  renderTableInfo('#logs-info', data, data.maxTotal);
+  renderPagination('#logs-pagination', data, 'logs', loadLogs);
 }
 
 async function loadFonio() {

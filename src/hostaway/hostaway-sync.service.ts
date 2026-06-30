@@ -343,7 +343,7 @@ export class HostawaySyncService {
       data: { hostawayConversationId: conversationId, lastSyncedAt: new Date() },
     });
 
-    const messages = await this.hostaway.getConversationMessages(conversationId, 10);
+    const messages = await this.hostaway.getConversationMessages(conversationId, 50);
     return { hostawayConversationId: conversationId, messages };
   }
 

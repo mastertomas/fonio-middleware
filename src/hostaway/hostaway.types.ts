@@ -67,6 +67,7 @@ export interface HostawayConversation {
 export interface HostawayConversationMessage {
   id: number;
   body: string;
+  emailFormatted?: string | null;
   communicationType: string;
   insertedOn?: string;
   isIncoming?: number;

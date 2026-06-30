@@ -44,7 +44,7 @@ export class AdminController {
   async listListings(@Query() query: PaginationQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 25;
-    const where = {};
+    const where = this.buildListingSearch(query.search);
     const [total, items] = await Promise.all([
       this.prisma.listing.count({ where }),
       this.prisma.listing.findMany({
@@ -63,9 +63,11 @@ export class AdminController {
   async listGroups(@Query() query: PaginationQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 25;
+    const where = this.buildGroupSearch(query.search);
     const [total, items] = await Promise.all([
-      this.prisma.listingGroup.count(),
+      this.prisma.listingGroup.count({ where }),
       this.prisma.listingGroup.findMany({
+        where,
         include: { listings: true },
         orderBy: { name: 'asc' },
         skip: (page - 1) * pageSize,
@@ -114,9 +116,11 @@ export class AdminController {
   async listReservations(@Query() query: PaginationQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 25;
+    const where = this.buildReservationSearch(query.search);
     const [total, items] = await Promise.all([
-      this.prisma.reservation.count(),
+      this.prisma.reservation.count({ where }),
       this.prisma.reservation.findMany({
+        where,
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: { arrivalDate: 'desc' },
@@ -236,5 +240,51 @@ export class AdminController {
   @ApiOperation({ summary: 'fonio.ai integration URLs for dashboard' })
   getFonioSetup() {
     return this.fonioSetup.getSetupUrls();
+  }
+
+  private buildListingSearch(search?: string): Prisma.ListingWhereInput {
+    const term = search?.trim();
+    if (!term) return {};
+    const id = Number(term);
+    return {
+      OR: [
+        { name: { contains: term, mode: 'insensitive' } },
+        { city: { contains: term, mode: 'insensitive' } },
+        { region: { contains: term, mode: 'insensitive' } },
+        { listingGroup: { name: { contains: term, mode: 'insensitive' } } },
+        ...(Number.isFinite(id) ? [{ hostawayId: id }] : []),
+      ],
+    };
+  }
+
+  private buildGroupSearch(search?: string): Prisma.ListingGroupWhereInput {
+    const term = search?.trim();
+    if (!term) return {};
+    const id = Number(term);
+    return {
+      OR: [
+        { name: { contains: term, mode: 'insensitive' } },
+        { city: { contains: term, mode: 'insensitive' } },
+        ...(Number.isFinite(id) ? [{ hostawayParentId: id }] : []),
+      ],
+    };
+  }
+
+  private buildReservationSearch(search?: string): Prisma.ReservationWhereInput {
+    const term = search?.trim();
+    if (!term) return {};
+    const id = Number(term);
+    return {
+      OR: [
+        { guestName: { contains: term, mode: 'insensitive' } },
+        { guestEmail: { contains: term, mode: 'insensitive' } },
+        { guestPhone: { contains: term, mode: 'insensitive' } },
+        { listing: { name: { contains: term, mode: 'insensitive' } } },
+        { listing: { listingGroup: { name: { contains: term, mode: 'insensitive' } } } },
+        ...(Number.isFinite(id)
+          ? [{ hostawayId: id }, { hostawayConversationId: id }]
+          : []),
+      ],
+    };
   }
 }

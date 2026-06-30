@@ -88,35 +88,46 @@
         <div class="card">
           <h3 data-i18n="dashboard.webhookActivity">Hostaway webhook activity</h3>
           <p class="field-hint" data-i18n="dashboard.webhookHint">When Hostaway sends reservation/listing events, the middleware syncs in the background. Shown here — no popup notification.</p>
+          <div id="webhooks-toolbar" class="table-toolbar"></div>
           <div class="table-wrap" id="webhook-activity"></div>
+          <div id="webhooks-info" class="table-info"></div>
+          <div id="webhooks-pagination" class="table-pagination"></div>
         </div>
       </section>
 
       <section id="tab-listings" class="tab hidden">
         <header class="page-header"><h2 data-i18n="listings.title">Listings</h2></header>
+        <div id="listings-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="listings-table"></div>
-        <div id="listings-pagination" class="pagination"></div>
+        <div id="listings-info" class="table-info"></div>
+        <div id="listings-pagination" class="table-pagination"></div>
       </section>
 
       <section id="tab-groups" class="tab hidden">
         <header class="page-header"><h2 data-i18n="nav.groups">Groups</h2></header>
         <p class="field-hint" data-i18n="groups.hint">Parent/child groups from Hostaway multi-unit API + configured cross-listings.</p>
+        <div id="groups-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="listing-groups-table"></div>
-        <div id="groups-pagination" class="pagination"></div>
+        <div id="groups-info" class="table-info"></div>
+        <div id="groups-pagination" class="table-pagination"></div>
       </section>
 
       <section id="tab-reservations" class="tab hidden">
         <header class="page-header"><h2 data-i18n="nav.reservations">Reservations</h2></header>
         <p class="field-hint" data-i18n="listings.reservationsHint">Full guest contact data for verification. fonio/API guests only see masked data.</p>
+        <div id="reservations-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="reservations-table"></div>
-        <div id="reservations-pagination" class="pagination"></div>
+        <div id="reservations-info" class="table-info"></div>
+        <div id="reservations-pagination" class="table-pagination"></div>
       </section>
 
       <section id="tab-conversations" class="tab hidden">
         <header class="page-header"><h2 data-i18n="nav.conversations">Conversations</h2></header>
         <p class="field-hint" data-i18n="conversations.hint">Conversation IDs are used to forward guest requests to Hostaway inbox. Click View to preview messages.</p>
+        <div id="conversations-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="conversations-table"></div>
-        <div id="conversations-pagination" class="pagination"></div>
+        <div id="conversations-info" class="table-info"></div>
+        <div id="conversations-pagination" class="table-pagination"></div>
       </section>
 
       <section id="tab-rules" class="tab hidden">
@@ -164,18 +175,27 @@
             </div>
           </form>
         </div>
+        <div id="rules-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="rules-table"></div>
+        <div id="rules-info" class="table-info"></div>
+        <div id="rules-pagination" class="table-pagination"></div>
         <div class="card" id="verification-config"></div>
       </section>
 
       <section id="tab-requests" class="tab hidden">
         <header class="page-header"><h2 data-i18n="requests.title">Guest requests</h2></header>
+        <div id="requests-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="requests-table"></div>
+        <div id="requests-info" class="table-info"></div>
+        <div id="requests-pagination" class="table-pagination"></div>
       </section>
 
       <section id="tab-logs" class="tab hidden">
         <header class="page-header"><h2 data-i18n="logs.title">API audit log</h2></header>
+        <div id="logs-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="logs-table"></div>
+        <div id="logs-info" class="table-info"></div>
+        <div id="logs-pagination" class="table-pagination"></div>
       </section>
 
       <section id="tab-fonio" class="tab hidden">
