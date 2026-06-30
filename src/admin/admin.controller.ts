@@ -86,7 +86,8 @@ export class AdminController {
       this.prisma.listing.count(),
       this.prisma.reservation.count(),
     ]);
-    return { last, settings, listingCount, reservationCount };
+    const inProgress = this.sync.isSyncInProgress();
+    return { last, settings, listingCount, reservationCount, inProgress };
   }
 
   @Get('sync/settings')
@@ -145,9 +146,16 @@ export class AdminController {
   }
 
   @Post('sync')
-  @ApiOperation({ summary: 'Trigger Hostaway full sync' })
+  @ApiOperation({ summary: 'Trigger Hostaway full sync (runs in background)' })
   triggerSync() {
-    return this.sync.syncAll();
+    if (this.sync.isSyncInProgress()) {
+      return { started: false, message: 'Sync already running' };
+    }
+    void this.sync.syncAll().catch((error) => {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Background sync failed: ${message}`);
+    });
+    return { started: true, message: 'Sync started in background' };
   }
 
   @Get('rules')

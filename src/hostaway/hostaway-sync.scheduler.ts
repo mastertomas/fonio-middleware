@@ -17,7 +17,7 @@ export class HostawaySyncScheduler {
   async handleScheduledSync() {
     const shouldRun = await this.syncSettings.shouldRunAutoSync();
     if (!shouldRun) return;
-    if (this.running) {
+    if (this.running || this.sync.isSyncInProgress()) {
       this.logger.warn('Sync already in progress, skipping');
       return;
     }

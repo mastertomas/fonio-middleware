@@ -72,8 +72,40 @@ function manageDashboardPoll() {
   if (activeTab === 'dashboard' && token) {
     dashboardPoll = setInterval(() => {
       if (activeTab === 'dashboard') loadDashboard();
-    }, 15000);
+    }, 5000);
   }
+}
+
+function formatSyncPhase(last, inProgress) {
+  if (!last || (last.status !== 'running' && !inProgress)) {
+    return last?.status || '–';
+  }
+  const meta = last.metadata || {};
+  if (meta.phase === 'listings') return t('dashboard.syncPhase.listings');
+  if (meta.phase === 'reservations') {
+    return t('dashboard.syncPhase.reservations', {
+      done: meta.reservationsDone ?? '?',
+      total: meta.reservationsTotal ?? '?',
+    });
+  }
+  if (meta.phase === 'calendars') {
+    return t('dashboard.syncPhase.calendars', {
+      done: meta.calendarListing ?? '?',
+      total: meta.calendarTotal ?? '?',
+    });
+  }
+  return t('dashboard.syncPhase.running');
+}
+
+function formatSyncTime(last, inProgress) {
+  if (!last?.startedAt) return '–';
+  if (last.status === 'running' || inProgress) {
+    const mins = Math.floor((Date.now() - new Date(last.startedAt).getTime()) / 60000);
+    return `${new Date(last.startedAt).toLocaleString(locale())} (${mins} min)`;
+  }
+  return last.finishedAt
+    ? new Date(last.finishedAt).toLocaleString(locale())
+    : new Date(last.startedAt).toLocaleString(locale());
 }
 
 function tableQuery(tabKey) {
@@ -354,8 +386,13 @@ $('#sync-btn').addEventListener('click', async () => {
   $('#sync-btn').disabled = true;
   try {
     const data = await api('/sync', { method: 'POST' });
-    el.innerHTML = `<p class="success">✓ ${t('dashboard.syncDone', { listings: data.listings, reservations: data.reservations })}</p>`;
-    notify.success(t('dashboard.syncDone', { listings: data.listings, reservations: data.reservations }));
+    if (!data.started) {
+      el.innerHTML = `<p class="field-hint">${t('dashboard.syncAlreadyRunning')}</p>`;
+      notify.info(t('dashboard.syncAlreadyRunning'));
+    } else {
+      el.innerHTML = `<p>${t('dashboard.syncStarted')}</p>`;
+      notify.success(t('dashboard.syncStarted'));
+    }
     loadDashboard();
   } catch (ex) {
     el.innerHTML = `<p class="error">${t('dashboard.syncError', { message: ex.message })}</p>`;
@@ -469,12 +506,21 @@ async function loadDashboard() {
   ]);
   const last = status.last;
   const settings = status.settings;
+  const syncLabel = formatSyncPhase(last, status.inProgress);
+  const syncTime = formatSyncTime(last, status.inProgress);
   $('#stats').innerHTML = `
     <div class="stat-card"><div class="value">${status.listingCount}</div><div class="label">${t('dashboard.listings')}</div></div>
     <div class="stat-card"><div class="value">${status.reservationCount}</div><div class="label">${t('dashboard.reservations')}</div></div>
-    <div class="stat-card"><div class="value">${last?.status || '–'}</div><div class="label">${t('dashboard.lastSync')}</div></div>
-    <div class="stat-card"><div class="value">${last?.finishedAt ? new Date(last.finishedAt).toLocaleString(locale()) : '–'}</div><div class="label">${t('dashboard.syncTime')}</div></div>
+    <div class="stat-card"><div class="value">${esc(syncLabel)}</div><div class="label">${t('dashboard.lastSync')}</div></div>
+    <div class="stat-card"><div class="value">${syncTime}</div><div class="label">${t('dashboard.syncTime')}</div></div>
   `;
+  if (last?.status === 'completed' && last.metadata) {
+    const meta = last.metadata;
+    $('#sync-result').innerHTML = `<p class="success">✓ ${t('dashboard.syncDone', {
+      listings: meta.listings ?? status.listingCount,
+      reservations: meta.reservations ?? status.reservationCount,
+    })}</p>`;
+  }
   $('#auto-sync-enabled').checked = settings?.autoSyncEnabled ?? true;
   $('#auto-sync-interval').value = settings?.intervalMinutes ?? 30;
   $('#auto-sync-hint').textContent = settings?.autoSyncEnabled

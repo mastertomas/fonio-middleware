@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ListingStatus } from '@prisma/client';
 import { hashPhoneForStorage, hashValue, maskGuestName } from '../common/utils/crypto.util';
@@ -8,8 +8,9 @@ import { EXCLUDED_LISTING_IDS } from './listing-hierarchy.config';
 import { ListingHierarchyService } from './listing-hierarchy.service';
 
 @Injectable()
-export class HostawaySyncService {
+export class HostawaySyncService implements OnModuleInit {
   private readonly logger = new Logger(HostawaySyncService.name);
+  private syncInProgress = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -18,14 +19,37 @@ export class HostawaySyncService {
     private readonly config: ConfigService,
   ) {}
 
+  async onModuleInit() {
+    const stale = await this.prisma.syncJob.updateMany({
+      where: { status: 'running' },
+      data: {
+        status: 'failed',
+        finishedAt: new Date(),
+        error: 'Interrupted — server restarted or sync did not finish',
+      },
+    });
+    if (stale.count > 0) {
+      this.logger.warn(`Marked ${stale.count} stale sync job(s) as failed`);
+    }
+  }
+
+  isSyncInProgress(): boolean {
+    return this.syncInProgress;
+  }
+
   async syncAll(jobType = 'full_sync'): Promise<{
     listings: number;
     reservations: number;
     calendarDays: number;
     removedListings: number;
   }> {
+    if (this.syncInProgress) {
+      throw new ConflictException('Hostaway sync is already running');
+    }
+
+    this.syncInProgress = true;
     const job = await this.prisma.syncJob.create({
-      data: { jobType, status: 'running' },
+      data: { jobType, status: 'running', metadata: { phase: 'listings' } },
     });
 
     try {
@@ -33,14 +57,33 @@ export class HostawaySyncService {
       await this.syncListingGroups(remoteListings);
       const listings = await this.syncListings(remoteListings);
       const removedListings = await this.removeStaleListings(remoteListings);
-      const reservations = await this.syncAllReservations();
-      const calendarDays = await this.syncAllCalendars();
+      await this.updateJobProgress(job.id, {
+        phase: 'reservations',
+        listings,
+        removedListings,
+      });
+
+      const reservations = await this.syncAllReservations(job.id);
+      await this.updateJobProgress(job.id, {
+        phase: 'calendars',
+        listings,
+        reservations,
+        removedListings,
+      });
+
+      const calendarDays = await this.syncAllCalendars(job.id);
       await this.prisma.syncJob.update({
         where: { id: job.id },
         data: {
           status: 'completed',
           finishedAt: new Date(),
-          metadata: { listings, reservations, calendarDays, removedListings },
+          metadata: {
+            phase: 'done',
+            listings,
+            reservations,
+            calendarDays,
+            removedListings,
+          },
         },
       });
       return { listings, reservations, calendarDays, removedListings };
@@ -51,7 +94,19 @@ export class HostawaySyncService {
         data: { status: 'failed', finishedAt: new Date(), error: message },
       });
       throw error;
+    } finally {
+      this.syncInProgress = false;
     }
+  }
+
+  private async updateJobProgress(
+    jobId: string,
+    metadata: Record<string, unknown>,
+  ) {
+    await this.prisma.syncJob.update({
+      where: { id: jobId },
+      data: { metadata: metadata as object },
+    });
   }
 
   private async syncListingGroups(
@@ -206,7 +261,7 @@ export class HostawaySyncService {
     return days.length;
   }
 
-  private async syncAllCalendars(): Promise<number> {
+  private async syncAllCalendars(jobId?: string): Promise<number> {
     const daysAhead = Number(this.config.get('CALENDAR_SYNC_DAYS') ?? 365);
     const listings = await this.prisma.listing.findMany({
       where: { isBookable: true },
@@ -217,13 +272,22 @@ export class HostawaySyncService {
     const format = (d: Date) => d.toISOString().slice(0, 10);
     let total = 0;
 
-    for (const listing of listings) {
+    for (let i = 0; i < listings.length; i += 1) {
+      const listing = listings[i];
       try {
         total += await this.syncListingCalendar(
           listing.hostawayId,
           format(today),
           format(end),
         );
+        if (jobId && (i === 0 || (i + 1) % 5 === 0 || i === listings.length - 1)) {
+          await this.updateJobProgress(jobId, {
+            phase: 'calendars',
+            calendarListing: i + 1,
+            calendarTotal: listings.length,
+            calendarDays: total,
+          });
+        }
         await this.sleep(250);
       } catch (error) {
         this.logger.warn(
@@ -236,9 +300,9 @@ export class HostawaySyncService {
     return total;
   }
 
-  async syncAllReservations(): Promise<number> {
+  async syncAllReservations(jobId?: string): Promise<number> {
     const reservations = await this.hostaway.getAllReservations({});
-    return this.upsertReservations(reservations);
+    return this.upsertReservations(reservations, { skipConversations: true, jobId });
   }
 
   async syncRecentReservations(): Promise<number> {
@@ -257,16 +321,24 @@ export class HostawaySyncService {
 
   private async upsertReservations(
     reservations: Awaited<ReturnType<HostawayClient['getAllReservations']>>,
+    options?: { skipConversations?: boolean; jobId?: string },
   ): Promise<number> {
     let count = 0;
+    const total = reservations.length;
     for (const remote of reservations) {
       const listing = await this.prisma.listing.findUnique({
         where: { hostawayId: remote.listingMapId },
       });
       if (!listing) continue;
 
-      const conversationId =
-        await this.hostaway.findConversationByReservation(remote.id);
+      const conversationId = options?.skipConversations
+        ? undefined
+        : await this.hostaway.findConversationByReservation(remote.id);
+
+      const conversationData =
+        conversationId !== undefined
+          ? { hostawayConversationId: conversationId }
+          : {};
 
       await this.prisma.reservation.upsert({
         where: { hostawayId: remote.id },
@@ -294,7 +366,7 @@ export class HostawaySyncService {
             remote.guestFirstName?.trim() ||
             remote.guestName?.trim().split(/\s+/)[0] ||
             null,
-          hostawayConversationId: conversationId,
+          hostawayConversationId: conversationId ?? null,
           lastSyncedAt: new Date(),
         },
         update: {
@@ -320,11 +392,23 @@ export class HostawaySyncService {
             remote.guestFirstName?.trim() ||
             remote.guestName?.trim().split(/\s+/)[0] ||
             null,
-          hostawayConversationId: conversationId ?? undefined,
+          ...conversationData,
           lastSyncedAt: new Date(),
         },
       });
       count++;
+
+      if (
+        options?.jobId &&
+        (count === 1 || count % 200 === 0 || count === total)
+      ) {
+        await this.updateJobProgress(options.jobId, {
+          phase: 'reservations',
+          reservationsDone: count,
+          reservationsTotal: total,
+        });
+        this.logger.log(`Reservation sync progress: ${count}/${total}`);
+      }
     }
 
     this.logger.log(`Synced ${count} reservations`);

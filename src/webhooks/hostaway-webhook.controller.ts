@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuditLogService } from '../logging/audit-log.service';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 
@@ -23,25 +23,35 @@ export class HostawayWebhookController {
   @Post()
   @HttpCode(200)
   @ApiOperation({ summary: 'Hostaway unified webhook receiver' })
+  @ApiBody({
+    schema: {
+      example: {
+        event: 'reservation updated',
+        id: 12345678,
+        objectId: 12345678,
+      },
+    },
+  })
   async handleWebhook(
     @Headers('authorization') authorization: string | undefined,
-    @Body() body: Record<string, unknown>,
+    @Body() body: Record<string, unknown> | undefined,
   ) {
     this.assertWebhookAuth(authorization);
 
+    const payload = body ?? {};
     const event = String(
-      body.event ?? body.object ?? body.type ?? 'unknown',
+      payload.event ?? payload.object ?? payload.type ?? 'unknown',
     ).toLowerCase();
     await this.audit.log({
       source: 'hostaway_webhook',
       action: event,
-      metadata: { event, objectId: body.id ?? body.objectId },
+      metadata: { event, objectId: payload.id ?? payload.objectId },
     });
 
     if (event.includes('reservation') || event.includes('listing')) {
       await this.sync.syncFromWebhook(event, {
         event,
-        objectId: body.id ?? body.objectId,
+        objectId: payload.id ?? payload.objectId,
       });
     }
 
