@@ -62,13 +62,23 @@ Logged to `ApiLog` table (see **Admin → API audit log**):
 - Admin: login success/failure, all mutating admin actions
 - IPs stored as **hashed** (`ipHash`)
 
-Retention (configurable):
+Retention (configurable, aligned with client agreement):
+
+| Type | Default | Env var |
+|------|---------|---------|
+| Development / debug | 14 days (7–14) | `LOG_RETENTION_DEBUG_DAYS` |
+| Operational / security | 30 days | `LOG_RETENTION_OPERATIONAL_DAYS` |
+| PII-related metadata | 30 days max | `LOG_RETENTION_PII_DAYS` |
+| Hard cap (extendable) | 90 days | `LOG_RETENTION_MAX_DAYS` |
 
 ```env
 LOG_RETENTION_DEBUG_DAYS=14
 LOG_RETENTION_OPERATIONAL_DAYS=30
 LOG_RETENTION_PII_DAYS=30
+LOG_RETENTION_MAX_DAYS=90
 ```
+
+Operational and PII retention are capped at `LOG_RETENTION_MAX_DAYS`. IPs are hashed; tokens and passwords are never logged.
 
 Expired logs purged daily at 03:00.
 

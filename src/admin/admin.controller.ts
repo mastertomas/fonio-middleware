@@ -118,7 +118,7 @@ export class AdminController {
   }
 
   @Patch('sync/settings')
-  @Roles(AdminRole.ADMIN)
+  @Roles(AdminRole.EDITOR, AdminRole.ADMIN)
   @ApiOperation({ summary: 'Update auto-sync settings' })
   updateSyncSettings(@Body() dto: UpdateSyncSettingsDto) {
     return this.syncSettings.update(dto);
@@ -429,9 +429,14 @@ export class AdminController {
   }
 
   @Get('fonio-setup')
-  @ApiOperation({ summary: 'fonio.ai integration URLs for dashboard' })
+  @ApiOperation({ summary: 'fonio integration URLs for dashboard (production only)' })
   getFonioSetup() {
-    return this.fonioSetup.getSetupUrls();
+    const urls = this.fonioSetup.getSetupUrls();
+    return {
+      production: urls.production,
+      fonioApiKeyConfigured: urls.fonioApiKeyConfigured,
+      notes: urls.notes,
+    };
   }
 
   private buildListingSearch(search?: string): Prisma.ListingWhereInput {

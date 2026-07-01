@@ -9,6 +9,7 @@ let cachedListings = [];
 let cachedConditionSchema = null;
 let editingRuleId = null;
 let dashboardPoll = null;
+let syncSettingsDirty = false;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const tableState = {
   listings: { page: 1, pageSize: 10, search: '' },
@@ -60,10 +61,16 @@ function canAdmin() {
 
 function applyRoleUi() {
   const readOnly = !canEdit();
-  $('#sync-btn')?.toggleAttribute('disabled', readOnly);
+  const syncBtn = $('#sync-btn');
+  syncBtn?.toggleAttribute('disabled', readOnly);
+  if (syncBtn) {
+    syncBtn.title = readOnly ? t('dashboard.syncReadonly') : '';
+  }
   $('#sync-settings-form')?.querySelectorAll('input, button').forEach((el) => {
-    el.toggleAttribute('disabled', !canAdmin());
+    el.toggleAttribute('disabled', readOnly);
   });
+  $('#sync-settings-readonly-hint')?.classList.toggle('hidden', canEdit());
+  updateAdminSession();
   $('#rule-form')?.querySelectorAll('input, select, button').forEach((el) => {
     if (el.id === 'rule-delete-btn') el.classList.toggle('hidden', !canAdmin() || !editingRuleId);
     else el.toggleAttribute('disabled', readOnly);
@@ -73,6 +80,33 @@ function applyRoleUi() {
     el.toggleAttribute('disabled', readOnly);
   });
   $('#inbox-backfill-btn')?.toggleAttribute('disabled', readOnly);
+}
+
+function updateAdminSession() {
+  const el = $('#admin-session');
+  if (!el || !token) return;
+  const roleLabel = adminRole || t('session.roleUnknown');
+  el.textContent = t('session.loggedInAs', { role: roleLabel });
+}
+
+async function restoreSession() {
+  if (!token) return false;
+  try {
+    const res = await fetch(`${AUTH}/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      logout();
+      return false;
+    }
+    const data = await res.json();
+    adminRole = data.role || '';
+    localStorage.setItem('adminRole', adminRole);
+    return true;
+  } catch {
+    logout();
+    return false;
+  }
 }
 
 function showApp() {
@@ -486,6 +520,7 @@ $('#login-form').addEventListener('submit', async (e) => {
     adminRole = data.user?.role ?? '';
     localStorage.setItem('adminToken', token);
     localStorage.setItem('adminRole', adminRole);
+    if (!adminRole) await restoreSession();
     showApp();
   } catch (ex) {
     err.textContent = ex.message || t('login.failed');
@@ -506,16 +541,29 @@ $$('.nav-btn').forEach((btn) => {
   });
 });
 
+$('#auto-sync-enabled')?.addEventListener('change', () => {
+  syncSettingsDirty = true;
+});
+$('#auto-sync-interval')?.addEventListener('input', () => {
+  syncSettingsDirty = true;
+});
+
 $('#sync-settings-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const intervalMinutes = Number($('#auto-sync-interval').value);
+  if (!Number.isFinite(intervalMinutes) || intervalMinutes < 5 || intervalMinutes > 1440) {
+    notify.error(t('dashboard.autoSyncIntervalInvalid'));
+    return;
+  }
   try {
     await api('/sync/settings', {
       method: 'PATCH',
       body: JSON.stringify({
         autoSyncEnabled: $('#auto-sync-enabled').checked,
-        intervalMinutes: Number($('#auto-sync-interval').value),
+        intervalMinutes,
       }),
     });
+    syncSettingsDirty = false;
     notify.success(t('dashboard.autoSyncSaved'));
     loadDashboard();
   } catch (ex) {
@@ -672,8 +720,10 @@ async function loadDashboard() {
       reservations: meta.reservations ?? status.reservationCount,
     })}</p>`;
   }
-  $('#auto-sync-enabled').checked = settings?.autoSyncEnabled ?? true;
-  $('#auto-sync-interval').value = settings?.intervalMinutes ?? 30;
+  if (!syncSettingsDirty) {
+    $('#auto-sync-enabled').checked = settings?.autoSyncEnabled ?? true;
+    $('#auto-sync-interval').value = settings?.intervalMinutes ?? 30;
+  }
   $('#auto-sync-hint').textContent = settings?.autoSyncEnabled
     ? t('dashboard.autoSyncNext', { minutes: settings.intervalMinutes })
     : t('dashboard.autoSyncOff');
@@ -1073,10 +1123,9 @@ async function loadFonio() {
     `).join('');
     return `<h3>${title}</h3>${rows}`;
   };
+  const urls = data.production ?? data;
   $('#fonio-setup').innerHTML = `
-    ${renderUrls(t('fonio.production'), data.production)}
-    <hr style="border-color:var(--border);margin:1rem 0">
-    ${renderUrls(t('fonio.local'), data.local)}
+    ${renderUrls(t('fonio.production'), urls)}
     <p style="margin-top:1rem;color:var(--muted);font-size:0.85rem">
       ${t('fonio.headerNote')} <code>x-api-key: &lt;FONIO_API_KEY&gt;</code>
     </p>
@@ -1102,5 +1151,7 @@ function esc(s) {
 }
 
 if (token) {
-  showApp();
+  restoreSession().then((ok) => {
+    if (ok) showApp();
+  });
 }

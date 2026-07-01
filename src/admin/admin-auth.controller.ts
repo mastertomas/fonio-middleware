@@ -1,6 +1,7 @@
-import { Body, Controller, Post, Req } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
 
@@ -13,5 +14,13 @@ export class AdminAuthController {
   @ApiOperation({ summary: 'Admin login (returns JWT bearer token)' })
   login(@Body() dto: AdminLoginDto, @Req() req: Request) {
     return this.auth.login(dto.email, dto.password, req.ip);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Current admin session (role for dashboard UI)' })
+  me(@Req() req: Request & { user: { id: string; email: string; role: string } }) {
+    return req.user;
   }
 }

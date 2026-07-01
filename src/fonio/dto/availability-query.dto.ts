@@ -47,4 +47,10 @@ export class AvailabilityQueryDto {
   @Transform(({ value }) => parseQueryBoolean(value))
   @IsBoolean()
   availableOnly?: boolean;
+
+  /** When true, refreshes stale calendars from Hostaway (slower). Default: cache-only for fast phone responses. */
+  @IsOptional()
+  @Transform(({ value }) => parseQueryBoolean(value))
+  @IsBoolean()
+  liveRefresh?: boolean;
 }

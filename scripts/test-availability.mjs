@@ -46,6 +46,12 @@ try {
     process.exit(1);
   }
   console.log('OK', res.status);
+  if (body.meta) {
+    console.log(
+      `Data source: ${body.meta.dataSource} (${body.meta.responseMs} ms, cache incomplete: ${body.meta.cacheIncomplete ?? 0})`,
+    );
+    if (body.meta.hint) console.log('Hint:', body.meta.hint);
+  }
   console.log('Available count:', body.availableCount);
   console.log('Total results:', body.results?.length ?? 0);
   const sample = (body.results ?? []).slice(0, 5);

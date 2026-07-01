@@ -24,17 +24,24 @@ export class AuditLogService {
   }) {
     const level = params.level ?? LogLevel.INFO;
     const debugDays = Number(this.config.get('LOG_RETENTION_DEBUG_DAYS') ?? 14);
-    const opDays = Number(
-      this.config.get('LOG_RETENTION_OPERATIONAL_DAYS') ?? 30,
+    const maxDays = Number(this.config.get('LOG_RETENTION_MAX_DAYS') ?? 90);
+    const opDays = Math.min(
+      Number(this.config.get('LOG_RETENTION_OPERATIONAL_DAYS') ?? 30),
+      maxDays,
     );
-    const piiDays = Number(this.config.get('LOG_RETENTION_PII_DAYS') ?? 30);
+    const piiDays = Math.min(
+      Number(this.config.get('LOG_RETENTION_PII_DAYS') ?? 30),
+      maxDays,
+    );
 
     const retentionDays =
       level === LogLevel.DEBUG
         ? debugDays
-        : params.metadata && this.containsPii(params.metadata)
-          ? piiDays
-          : opDays;
+        : level === LogLevel.SECURITY || level === LogLevel.ERROR
+          ? opDays
+          : params.metadata && this.containsPii(params.metadata)
+            ? piiDays
+            : opDays;
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + retentionDays);

@@ -15,7 +15,24 @@ export interface AvailabilityResultItem {
   roomType: string | null;
   petsAllowed: boolean;
   available: boolean;
+  /** True when calendar cache is incomplete and live refresh was not requested. */
+  availabilityUnknown?: boolean;
   groupName: string | null;
+}
+
+export interface AvailabilitySearchResult {
+  checkIn: string;
+  checkOut: string;
+  guests: number;
+  results: AvailabilityResultItem[];
+  availableCount: number;
+  meta: {
+    dataSource: 'cache' | 'live';
+    responseMs: number;
+    listingsChecked: number;
+    cacheIncomplete: number;
+    hint?: string;
+  };
 }
 
 type ListingWithGroup = Listing & { listingGroup: ListingGroup | null };
@@ -30,11 +47,16 @@ export class FonioAvailabilityService {
     private readonly config: ConfigService,
   ) {}
 
-  async search(query: AvailabilityQueryDto): Promise<AvailabilityResultItem[]> {
+  async search(query: AvailabilityQueryDto): Promise<AvailabilitySearchResult> {
+    const started = Date.now();
     const nights = this.enumerateDates(query.checkIn, query.checkOut);
     if (nights.length === 0) {
       throw new BadRequestException('checkOut must be after checkIn');
     }
+
+    const liveRefresh =
+      query.liveRefresh === true ||
+      this.config.get('AVAILABILITY_LIVE_REFRESH_DEFAULT') === 'true';
 
     const where: Prisma.ListingWhereInput = {
       isBookable: true,
@@ -64,67 +86,53 @@ export class FonioAvailabilityService {
     });
 
     const candidates = listings.filter((l) => this.isVisibleForGroupMode(l));
-    if (candidates.length === 0) return [];
+    if (candidates.length === 0) {
+      return this.wrapResponse(query, [], started, 'cache', 0);
+    }
 
     const listingIds = candidates.map((l) => l.id);
-    const cachedDays = await this.prisma.calendarDay.findMany({
+    let cachedDays = await this.prisma.calendarDay.findMany({
       where: {
         listingId: { in: listingIds },
         date: { in: nights },
       },
     });
 
-    const daysByListing = new Map<string, typeof cachedDays>();
-    const latestSyncByListing = new Map<string, Date>();
-    for (const day of cachedDays) {
-      const bucket = daysByListing.get(day.listingId) ?? [];
-      bucket.push(day);
-      daysByListing.set(day.listingId, bucket);
-
-      const prev = latestSyncByListing.get(day.listingId);
-      if (!prev || day.syncedAt > prev) {
-        latestSyncByListing.set(day.listingId, day.syncedAt);
-      }
-    }
-
-    const staleListings = candidates.filter((listing) => {
-      const latest = latestSyncByListing.get(listing.id);
-      const hasAllNights = (daysByListing.get(listing.id)?.length ?? 0) >= nights.length;
-      const cacheFresh =
-        latest && Date.now() - latest.getTime() < this.cacheMaxAgeMs;
-      return !hasAllNights || !cacheFresh;
-    });
-
-    const syncConcurrency = Number(
-      this.config.get('AVAILABILITY_SYNC_CONCURRENCY') ?? 3,
+    const { daysByListing, staleListings } = this.indexCalendarDays(
+      cachedDays,
+      candidates,
+      nights,
     );
-    await mapWithConcurrency(staleListings, syncConcurrency, async (listing) => {
-      await this.sync.syncListingCalendar(
-        listing.hostawayId,
-        query.checkIn,
-        query.checkOut,
+
+    if (liveRefresh && staleListings.length > 0) {
+      const syncConcurrency = Number(
+        this.config.get('AVAILABILITY_SYNC_CONCURRENCY') ?? 3,
       );
-    });
-
-    const refreshedDays =
-      staleListings.length > 0
-        ? await this.prisma.calendarDay.findMany({
-            where: {
-              listingId: { in: listingIds },
-              date: { in: nights },
-            },
-          })
-        : cachedDays;
-
-    const refreshedByListing = new Map<string, typeof refreshedDays>();
-    for (const day of refreshedDays) {
-      const bucket = refreshedByListing.get(day.listingId) ?? [];
-      bucket.push(day);
-      refreshedByListing.set(day.listingId, bucket);
+      await mapWithConcurrency(staleListings, syncConcurrency, async (listing) => {
+        await this.sync.syncListingCalendar(
+          listing.hostawayId,
+          query.checkIn,
+          query.checkOut,
+        );
+      });
+      cachedDays = await this.prisma.calendarDay.findMany({
+        where: {
+          listingId: { in: listingIds },
+          date: { in: nights },
+        },
+      });
     }
+
+    const { daysByListing: finalDays } = this.indexCalendarDays(
+      cachedDays,
+      candidates,
+      nights,
+    );
 
     const results: AvailabilityResultItem[] = candidates.map((listing) => {
-      const days = refreshedByListing.get(listing.id) ?? [];
+      const days = finalDays.get(listing.id) ?? [];
+      const cacheComplete = days.length >= nights.length;
+      const available = cacheComplete && this.isStayAvailable(days, nights.length);
       return {
         listingId: listing.hostawayId,
         name: listing.name,
@@ -133,16 +141,90 @@ export class FonioAvailabilityService {
         bedrooms: listing.bedroomsNumber,
         roomType: listing.roomType,
         petsAllowed: listing.petsAllowed,
-        available: this.isStayAvailable(days, nights.length),
+        available,
+        availabilityUnknown: !liveRefresh && !cacheComplete,
         groupName: listing.listingGroup?.name ?? null,
       };
     });
 
     const sorted = results.sort((a, b) => Number(b.available) - Number(a.available));
-    if (query.availableOnly) {
-      return sorted.filter((r) => r.available);
+    const filtered = query.availableOnly
+      ? sorted.filter((r) => r.available)
+      : sorted;
+
+    const cacheIncomplete = results.filter((r) => r.availabilityUnknown).length;
+
+    return this.wrapResponse(
+      query,
+      filtered,
+      started,
+      liveRefresh ? 'live' : 'cache',
+      cacheIncomplete,
+    );
+  }
+
+  private wrapResponse(
+    query: AvailabilityQueryDto,
+    results: AvailabilityResultItem[],
+    started: number,
+    dataSource: 'cache' | 'live',
+    cacheIncomplete: number,
+  ): AvailabilitySearchResult {
+    const hint =
+      dataSource === 'cache' && cacheIncomplete > 0
+        ? 'Some listings have incomplete calendar cache. Run Hostaway sync or use liveRefresh=true for live Hostaway lookup (slower).'
+        : undefined;
+
+    return {
+      checkIn: query.checkIn,
+      checkOut: query.checkOut,
+      guests: query.guests,
+      results,
+      availableCount: results.filter((r) => r.available).length,
+      meta: {
+        dataSource,
+        responseMs: Date.now() - started,
+        listingsChecked: results.length,
+        cacheIncomplete,
+        hint,
+      },
+    };
+  }
+
+  private indexCalendarDays(
+    cachedDays: {
+      listingId: string;
+      date: Date;
+      isAvailable: boolean;
+      minNights: number | null;
+      syncedAt: Date;
+    }[],
+    candidates: ListingWithGroup[],
+    nights: Date[],
+  ) {
+    const daysByListing = new Map<string, typeof cachedDays>();
+    const latestSyncByListing = new Map<string, Date>();
+
+    for (const day of cachedDays) {
+      const bucket = daysByListing.get(day.listingId) ?? [];
+      bucket.push(day);
+      daysByListing.set(day.listingId, bucket);
+      const prev = latestSyncByListing.get(day.listingId);
+      if (!prev || day.syncedAt > prev) {
+        latestSyncByListing.set(day.listingId, day.syncedAt);
+      }
     }
-    return sorted;
+
+    const staleListings = candidates.filter((listing) => {
+      const latest = latestSyncByListing.get(listing.id);
+      const hasAllNights =
+        (daysByListing.get(listing.id)?.length ?? 0) >= nights.length;
+      const cacheFresh =
+        latest && Date.now() - latest.getTime() < this.cacheMaxAgeMs;
+      return !hasAllNights || !cacheFresh;
+    });
+
+    return { daysByListing, staleListings };
   }
 
   /** Respect PARENT_ONLY / CHILDREN_ONLY / BOTH from listing groups. */

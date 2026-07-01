@@ -14,13 +14,42 @@ export class HealthController {
   }
 
   @Get('health')
-  @ApiOperation({ summary: 'Health check' })
+  @ApiOperation({ summary: 'Health check (for monitoring / load balancers)' })
   async health() {
-    await this.prisma.$queryRaw`SELECT 1`;
+    let database: 'ok' | 'error' = 'ok';
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+    } catch {
+      database = 'error';
+    }
+
+    const lastSync = await this.prisma.syncJob.findFirst({
+      where: { status: 'completed' },
+      orderBy: { finishedAt: 'desc' },
+      select: { finishedAt: true, jobType: true },
+    });
+
+    const failedSync = await this.prisma.syncJob.findFirst({
+      where: { status: 'failed' },
+      orderBy: { finishedAt: 'desc' },
+      select: { finishedAt: true, error: true },
+    });
+
+    const status = database === 'ok' ? 'ok' : 'degraded';
+
     return {
-      status: 'ok',
+      status,
       service: 'vermietung-middleware',
       timestamp: new Date().toISOString(),
+      checks: {
+        database,
+      },
+      sync: {
+        lastCompletedAt: lastSync?.finishedAt ?? null,
+        lastJobType: lastSync?.jobType ?? null,
+        lastFailedAt: failedSync?.finishedAt ?? null,
+        lastError: failedSync?.error ?? null,
+      },
     };
   }
 }

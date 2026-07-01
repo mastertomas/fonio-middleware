@@ -82,7 +82,7 @@ Use a real `hostawayId` from **Admin → Reservations**.
 ## Example call flow
 
 1. **Call starts** → fonio calls `call-context` with caller phone
-2. **Availability question** → fonio calls `GET /availability?city=Stuttgart&checkIn=...`
+2. **Availability question** → fonio says *"Einen Moment, ich schaue nach…"* → `GET /availability?city=Stuttgart&checkIn=...` (cache-first, fast)
 3. **Existing guest** → fonio asks reservation ID + dates → `POST /guest/verify`
 4. **Guest request** (pet, extra guest) → `POST /guest/requests` with `verificationToken`
 5. **Manual requests** → posted to the Hostaway guest conversation inbox (middleware looks up conversation automatically)
@@ -132,6 +132,21 @@ curl "http://localhost:3000/api/v1/fonio/availability?city=Stuttgart&checkIn=202
 ```
 
 **Before testing:** run **Hostaway Sync** in admin so listings and calendars exist in the database.
+
+## Availability performance (phone calls)
+
+The availability endpoint is **cache-first** by default:
+
+| Query param | Default | Use |
+|-------------|---------|-----|
+| (none) | cache | Live phone calls — typically &lt;200 ms |
+| `liveRefresh=true` | off | Admin/debug only — hits Hostaway live (slower) |
+
+Response includes `meta.dataSource` (`cache` or `live`) and `meta.responseMs`.
+
+Background sync (default every 30 min) keeps calendars fresh. If `availabilityUnknown: true` on a listing, calendar cache is incomplete — run sync or use `liveRefresh=true` only outside calls.
+
+See `docs/CLIENT_OVERVIEW.md` for the two use cases (existing guests vs availability).
 
 ### Production test
 

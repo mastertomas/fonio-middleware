@@ -55,27 +55,28 @@ export class FonioController {
   }
 
   @Get('availability')
-  @ApiOperation({ summary: 'Search availability without exposing guest PII' })
+  @ApiOperation({
+    summary:
+      'Search availability without exposing guest PII (cache-first for fast phone responses)',
+  })
   async searchAvailability(@Query() query: AvailabilityQueryDto) {
-    const results = await this.availability.search(query);
+    const started = Date.now();
+    const data = await this.availability.search(query);
     await this.audit.log({
       source: 'fonio',
       action: 'availability_search',
+      durationMs: Date.now() - started,
       metadata: {
         city: query.city,
         checkIn: query.checkIn,
         checkOut: query.checkOut,
         guests: query.guests,
-        resultCount: results.filter((r) => r.available).length,
+        dataSource: data.meta.dataSource,
+        responseMs: data.meta.responseMs,
+        availableCount: data.availableCount,
       },
     });
-    return {
-      checkIn: query.checkIn,
-      checkOut: query.checkOut,
-      guests: query.guests,
-      results,
-      availableCount: results.filter((r) => r.available).length,
-    };
+    return data;
   }
 
   @Post('guest/verify')

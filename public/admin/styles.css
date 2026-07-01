@@ -197,6 +197,14 @@ body {
   width: 100%;
 }
 
+.admin-session {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
 .content {
   padding: 1.5rem 2rem;
   overflow: auto;

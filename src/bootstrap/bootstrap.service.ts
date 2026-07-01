@@ -27,7 +27,15 @@ export class BootstrapService implements OnModuleInit {
     const existing = await this.prisma.adminUser.findUnique({
       where: { email },
     });
-    if (existing) return;
+    if (existing) {
+      if (existing.role !== AdminRole.ADMIN) {
+        await this.prisma.adminUser.update({
+          where: { email },
+          data: { role: AdminRole.ADMIN },
+        });
+      }
+      return;
+    }
 
     const passwordHash = await bcrypt.hash(password, 12);
     await this.prisma.adminUser.create({

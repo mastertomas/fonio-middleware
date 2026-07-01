@@ -58,6 +58,7 @@
         </div>
       </nav>
       <div class="sidebar-footer">
+        <p id="admin-session" class="admin-session"></p>
         <button id="logout-btn" class="btn ghost" data-i18n="nav.logout">Sign out</button>
       </div>
     </aside>
@@ -82,6 +83,7 @@
             </label>
             <button type="submit" class="btn primary" data-i18n="dashboard.autoSyncSave">Save settings</button>
           </form>
+          <p id="sync-settings-readonly-hint" class="field-hint hidden" data-i18n="dashboard.autoSyncReadonly">Only EDITOR or ADMIN can change sync settings.</p>
           <p id="auto-sync-hint" class="field-hint"></p>
         </div>
         <div class="card" id="sync-result"></div>
@@ -228,6 +230,7 @@
 
       <section id="tab-logs" class="tab hidden">
         <header class="page-header"><h2 data-i18n="logs.title">API audit log</h2></header>
+        <p class="field-hint" data-i18n="logs.hint">Technical API events (fonio calls, admin actions, webhooks). No guest names or phone numbers. Includes development tests until fonio goes live.</p>
         <div id="logs-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="logs-table"></div>
         <div id="logs-info" class="table-info"></div>
@@ -237,15 +240,6 @@
       <section id="tab-fonio" class="tab hidden">
         <header class="page-header"><h2 data-i18n="fonio.title">fonio.ai integration</h2></header>
         <div class="card" id="fonio-setup"></div>
-        <div class="card">
-          <h3 data-i18n="fonio.promptTemplates">Prompt templates (in project)</h3>
-          <ul class="doc-list">
-            <li><code>docs/fonio-prompt-startnachricht.txt</code> <span data-i18n="fonio.doc.start">→ fonio greeting</span></li>
-            <li><code>docs/fonio-prompt-system-de.txt</code> <span data-i18n="fonio.doc.system">→ fonio system prompt</span></li>
-            <li><code>docs/fonio-tools-config.json</code> <span data-i18n="fonio.doc.tools">→ API tool reference</span></li>
-            <li><code>docs/FONIO_SETUP.md</code> <span data-i18n="fonio.doc.setup">→ Detailed setup guide</span></li>
-          </ul>
-        </div>
       </section>
     </main>
   </div>

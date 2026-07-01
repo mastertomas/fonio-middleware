@@ -102,9 +102,15 @@ All fonio endpoints require header: `x-api-key: YOUR_FONIO_API_KEY`
 | GET/POST | `/api/v1/admin/rules` | Approval rules |
 | GET/PATCH | `/api/v1/admin/verification-config` | Verification settings |
 
+## Client overview
+
+See **[docs/CLIENT_OVERVIEW.md](docs/CLIENT_OVERVIEW.md)** for the two main use cases (existing guests vs fast availability), Hostaway messaging credentials, and deliverables checklist.
+
 ## Security & privacy
 
 See **[docs/SECURITY.md](docs/SECURITY.md)** for GDPR practices, roles, HTTPS, and credential handling.
+
+See **[docs/MONITORING.md](docs/MONITORING.md)** for health checks and error logging.
 
 - **API docs:** [Swagger UI](/docs) at `/docs` when running
 - **No secrets in frontend** — admin UI uses JWT only; fonio uses server-side `x-api-key`
