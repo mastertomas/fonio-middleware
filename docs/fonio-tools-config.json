@@ -27,7 +27,7 @@
         "arrivalDate": "2026-07-06",
         "departureDate": "2026-07-16"
       },
-      "whenToUse": "Gast hat Fragen zur eigenen Buchung oder möchte eine Änderung"
+      "whenToUse": "PFLICHT vor Buchungsdetails, Buchung abrufen oder Gästeanfrage — auch wenn Anrufer erkannt wurde"
     },
     {
       "name": "Buchung abrufen",

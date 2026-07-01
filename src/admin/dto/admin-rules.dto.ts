@@ -1,12 +1,18 @@
 import {
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsObject,
   IsOptional,
   IsString,
+  Max,
+  Min,
 } from 'class-validator';
 import { ApprovalMode, RequestType } from '@prisma/client';
+import { VERIFICATION_FIELD_OPTIONS } from '../../fonio/verification-fields';
 
 export class CreateApprovalRuleDto {
   @IsOptional()
@@ -60,9 +66,15 @@ export class UpdateApprovalRuleDto {
 
 export class UpdateVerificationConfigDto {
   @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  @IsIn([...VERIFICATION_FIELD_OPTIONS], { each: true })
   requiredFields?: string[];
 
   @IsOptional()
   @IsInt()
+  @Min(1)
+  @Max(6)
   minMatchCount?: number;
 }

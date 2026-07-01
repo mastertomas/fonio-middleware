@@ -18,6 +18,7 @@ import {
 } from '../common/dto/pagination-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { FonioCallContextService } from '../fonio/fonio-call-context.service';
+import { FonioVerificationService } from '../fonio/fonio-verification.service';
 import { HostawayClient } from '../hostaway/hostaway.client';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { SyncSettingsService } from '../hostaway/sync-settings.service';
@@ -259,22 +260,49 @@ export class AdminController {
   }
 
   @Get('verification-config')
-  @ApiOperation({ summary: 'Get default verification config' })
+  @ApiOperation({ summary: 'Get default guest verification config (fonio)' })
   getVerificationConfig() {
     return this.prisma.verificationConfig.findFirst({
       where: { isDefault: true },
     });
   }
 
+  @Get('verification-config/fields')
+  @ApiOperation({ summary: 'Allowed verification field names' })
+  getVerificationFieldOptions() {
+    return {
+      fields: FonioVerificationService.getFieldOptions(),
+      descriptions: {
+        reservationId: 'Hostaway reservation number (always required in API)',
+        phone: 'Phone number linked to the booking',
+        email: 'Email address on the booking',
+        arrivalDate: 'Check-in date (YYYY-MM-DD)',
+        departureDate: 'Check-out date (YYYY-MM-DD)',
+        listingName: 'Booked property name (partial match)',
+      },
+    };
+  }
+
   @Patch('verification-config/:id')
-  @ApiOperation({ summary: 'Update verification config' })
-  updateVerificationConfig(
+  @ApiOperation({ summary: 'Update guest verification rules (not approval rules)' })
+  async updateVerificationConfig(
     @Param('id') id: string,
     @Body() dto: UpdateVerificationConfigDto,
   ) {
+    const fields = dto.requiredFields?.includes('reservationId')
+      ? dto.requiredFields
+      : ['reservationId', ...(dto.requiredFields ?? [])];
+    const uniqueFields = [...new Set(fields)];
+    const minMatch = Math.min(
+      dto.minMatchCount ?? uniqueFields.length,
+      uniqueFields.length,
+    );
     return this.prisma.verificationConfig.update({
       where: { id },
-      data: dto,
+      data: {
+        requiredFields: uniqueFields,
+        minMatchCount: minMatch,
+      },
     });
   }
 

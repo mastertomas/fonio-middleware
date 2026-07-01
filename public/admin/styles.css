@@ -694,6 +694,52 @@ body.modal-open {
   font-size: 0.85rem;
 }
 
+.section-subtitle {
+  margin: 2rem 0 0.35rem;
+  font-size: 1.1rem;
+}
+
+.section-hint {
+  margin-bottom: 1rem;
+}
+
+.verification-card {
+  margin-bottom: 1.5rem;
+  border-color: var(--accent);
+}
+
+.verification-form fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.verification-form legend {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.checkbox-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.verification-field-row.locked {
+  opacity: 0.85;
+}
+
+.verification-min-match {
+  display: block;
+  max-width: 280px;
+  margin-bottom: 1rem;
+}
+
+.verification-min-match input {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
 .modal-wide {
   max-width: 640px;
   max-height: 85vh;

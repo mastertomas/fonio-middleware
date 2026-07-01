@@ -704,15 +704,82 @@ $('#conversation-modal').addEventListener('click', (e) => {
   }
 });
 
+const VERIFICATION_FIELDS = [
+  'reservationId',
+  'phone',
+  'email',
+  'arrivalDate',
+  'departureDate',
+  'listingName',
+];
+
+function renderVerificationForm(config, fieldMeta) {
+  const container = $('#verification-field-checkboxes');
+  if (!container) return;
+  const selected = new Set(config?.requiredFields ?? ['reservationId', 'phone', 'arrivalDate']);
+  $('#verification-config-id').value = config?.id ?? '';
+  $('#verification-min-match').value = config?.minMatchCount ?? selected.size;
+  $('#verification-min-match').max = VERIFICATION_FIELDS.length;
+
+  container.innerHTML = VERIFICATION_FIELDS.map((field) => {
+    const locked = field === 'reservationId';
+    const checked = locked || selected.has(field);
+    const label = t(`verification.field.${field}`);
+    const hint = fieldMeta?.descriptions?.[field] ?? '';
+    return `
+      <label class="checkbox-row verification-field-row${locked ? ' locked' : ''}">
+        <input type="checkbox" name="verification-field" value="${field}" ${checked ? 'checked' : ''} ${locked ? 'disabled' : ''} />
+        <span>
+          <strong>${label}</strong>
+          ${locked ? `<em class="field-hint">(${t('verification.field.reservationIdLocked')})</em>` : ''}
+          ${hint ? `<br><span class="field-hint">${esc(hint)}</span>` : ''}
+        </span>
+      </label>`;
+  }).join('');
+}
+
+function getVerificationFormData() {
+  const fields = ['reservationId'];
+  $$('input[name="verification-field"]:checked').forEach((cb) => {
+    if (cb.value !== 'reservationId') fields.push(cb.value);
+  });
+  const minMatch = Number($('#verification-min-match').value);
+  return {
+    requiredFields: [...new Set(fields)],
+    minMatchCount: Math.min(minMatch, fields.length),
+  };
+}
+
+$('#verification-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = $('#verification-config-id').value;
+  if (!id) {
+    notify.error(t('rules.noConfig'));
+    return;
+  }
+  try {
+    await api(`/verification-config/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(getVerificationFormData()),
+    });
+    notify.success(t('verification.saved'));
+    loadRules();
+  } catch (ex) {
+    notify.error(ex.message);
+  }
+});
+
 async function loadRules() {
-  const [rules, config, listingsData] = await Promise.all([
+  const [rules, config, fieldMeta, listingsData] = await Promise.all([
     api('/rules'),
     api('/verification-config'),
+    api('/verification-config/fields'),
     api('/listings?pageSize=100'),
   ]);
   cachedRules = rules;
   cachedListings = listingsData.items || listingsData;
   populateListingSelect();
+  renderVerificationForm(config, fieldMeta);
 
   renderTableToolbar('#rules-toolbar', 'rules', loadRules);
   const data = paginateClient(rules, 'rules', (r) => [
@@ -738,11 +805,6 @@ async function loadRules() {
     </tr></thead><tbody>${rows || `<tr><td colspan="5">${t('rules.none')}</td></tr>`}</tbody></table>`;
   renderTableInfo('#rules-info', data, data.maxTotal);
   renderPagination('#rules-pagination', data, 'rules', loadRules);
-  $('#verification-config').innerHTML = config ? `
-    <h3>${t('rules.verification')}</h3>
-    <p>${t('rules.requiredFields')} <code>${(config.requiredFields || []).join(', ')}</code></p>
-    <p>${t('rules.minMatches')} <strong>${config.minMatchCount}</strong></p>
-  ` : `<p>${t('rules.noConfig')}</p>`;
   if (editingRuleId) {
     const current = rules.find((r) => r.id === editingRuleId);
     if (current) loadRuleIntoForm(current);

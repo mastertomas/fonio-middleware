@@ -131,7 +131,30 @@
       </section>
 
       <section id="tab-rules" class="tab hidden">
-        <header class="page-header"><h2 data-i18n="rules.title">Approval rules</h2></header>
+        <header class="page-header"><h2 data-i18n="rules.pageTitle">Rules &amp; verification</h2></header>
+
+        <div class="card verification-card">
+          <h3 data-i18n="verification.title">Guest verification</h3>
+          <p class="field-hint" data-i18n="verification.hint">Required before fonio shares booking details or processes changes. This is separate from approval rules below.</p>
+          <form id="verification-form" class="verification-form">
+            <input type="hidden" id="verification-config-id" value="" />
+            <fieldset class="verification-fields">
+              <legend data-i18n="verification.requiredFieldsLegend">Required verification fields</legend>
+              <div id="verification-field-checkboxes" class="checkbox-grid"></div>
+            </fieldset>
+            <label class="verification-min-match">
+              <span data-i18n="verification.minMatches">Minimum fields that must match</span>
+              <input type="number" id="verification-min-match" min="1" max="6" value="3" />
+              <span class="field-hint" data-i18n="verification.minMatchesHint">Cannot exceed the number of selected fields. Reservation number is always required.</span>
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="btn primary" data-i18n="verification.save">Save verification settings</button>
+            </div>
+          </form>
+        </div>
+
+        <h3 class="section-subtitle" data-i18n="rules.approvalTitle">Approval rules (after verification)</h3>
+        <p class="field-hint section-hint" data-i18n="rules.approvalHint">How guest requests (pet, extra guest, cancellation, etc.) are auto-approved, forwarded, or denied — only after the guest is verified.</p>
         <div class="card">
           <div class="form-header">
             <h3 id="rule-form-title" data-i18n="rules.newRule">New rule</h3>
@@ -179,7 +202,6 @@
         <div class="table-wrap" id="rules-table"></div>
         <div id="rules-info" class="table-info"></div>
         <div id="rules-pagination" class="table-pagination"></div>
-        <div class="card" id="verification-config"></div>
       </section>
 
       <section id="tab-requests" class="tab hidden">

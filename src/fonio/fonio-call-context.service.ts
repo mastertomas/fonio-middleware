@@ -21,8 +21,6 @@ export class FonioCallContextService {
       has_upcoming_booking: false,
       guest_name_hint: null as string | null,
       guest_first_name_hint: null as string | null,
-      listing_city_hint: null as string | null,
-      reservation_id_hint: null as number | null,
       greeting_hint:
         'Guten Tag, Sie erreichen brainions Vermietung. Wie kann ich Ihnen helfen?',
       hint_requires_verification: true,
@@ -61,8 +59,6 @@ export class FonioCallContextService {
       has_upcoming_booking: true,
       guest_name_hint: reservation.guestNameMasked,
       guest_first_name_hint: firstName,
-      listing_city_hint: reservation.listing.city,
-      reservation_id_hint: reservation.hostawayId,
       greeting_hint: greeting,
     };
   }

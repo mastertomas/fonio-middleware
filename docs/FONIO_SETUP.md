@@ -51,11 +51,33 @@ After inbound webhook, fonio receives:
 |----------|---------|
 | `caller_recognized` | Phone matched a reservation |
 | `has_upcoming_booking` | Guest has active/upcoming stay |
-| `guest_first_name_hint` | First name for greeting (e.g. "Falko") |
+| `guest_first_name_hint` | First name for greeting only (not verification) |
 | `greeting_hint` | Ready-to-use German greeting |
-| `listing_city_hint` | City of booked property |
-| `reservation_id_hint` | Hostaway reservation ID (for verify step) |
-| `hint_requires_verification` | Must verify before sharing details |
+| `hint_requires_verification` | Must verify before sharing booking details |
+
+**Note:** The webhook does **not** return reservation ID or city before verification. fonio must call `guest/verify` first.
+
+## Guest verification (admin)
+
+Configure in **Admin → Rules & verification → Guest verification** (separate from approval rules):
+
+| Field | Meaning |
+|-------|---------|
+| Reservation number | Always required |
+| Phone | Linked to booking |
+| Email | Booking email |
+| Arrival / departure | Travel dates |
+| Property name | Partial match on listing name |
+
+Default: reservation + phone + arrival + departure must all match.
+
+Test locally:
+
+```bash
+npm run test:verify -- --reservationId=62144308 --phone=+491701234567 --arrival=2026-07-06 --departure=2026-07-16
+```
+
+Use a real `hostawayId` from **Admin → Reservations**.
 
 ## Example call flow
 

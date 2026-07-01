@@ -52,7 +52,7 @@ export class BootstrapService implements OnModuleInit {
           'arrivalDate',
           'departureDate',
         ],
-        minMatchCount: 3,
+        minMatchCount: 4,
         isDefault: true,
       },
     });
