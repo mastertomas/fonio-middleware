@@ -135,7 +135,22 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 Migrations run automatically on container start.
 
-## 8. Backups
+## 8. Security (production)
+
+Set in `.env` before deploy (see [SECURITY.md](SECURITY.md)):
+
+```env
+NODE_ENV=production
+FORCE_HTTPS=true
+JWT_SECRET=<strong-random-secret>
+FONIO_API_KEY=<unique-key>
+HOSTAWAY_WEBHOOK_USERNAME=<webhook-user>
+HOSTAWAY_WEBHOOK_PASSWORD=<webhook-password>
+```
+
+`docker-compose.prod.yml` sets `NODE_ENV=production` and `FORCE_HTTPS=true` on the API container. Caddy provides automatic HTTPS.
+
+## 9. Backups
 
 Back up the Postgres volume regularly:
 

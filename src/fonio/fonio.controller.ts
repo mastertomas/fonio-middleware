@@ -96,10 +96,16 @@ export class FonioController {
     @Query('reservationId') reservationId: string,
     @Query('verificationToken') verificationToken: string,
   ) {
-    return this.verification.getSafeReservation(
+    const result = await this.verification.getSafeReservation(
       Number(reservationId),
       verificationToken,
     );
+    await this.audit.log({
+      source: 'fonio',
+      action: 'guest_reservation',
+      metadata: { reservationId: Number(reservationId) },
+    });
+    return result;
   }
 
   @Post('guest/requests')

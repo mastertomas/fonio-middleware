@@ -44,6 +44,8 @@ services:
       REDIS_URL: redis://redis:6379
       APP_URL: https://${DOMAIN:-vermietung.brainions.digital}
       PRODUCTION_URL: https://${DOMAIN:-vermietung.brainions.digital}
+      NODE_ENV: production
+      FORCE_HTTPS: 'true'
     healthcheck:
       test:
         [

@@ -102,6 +102,14 @@ All fonio endpoints require header: `x-api-key: YOUR_FONIO_API_KEY`
 | GET/POST | `/api/v1/admin/rules` | Approval rules |
 | GET/PATCH | `/api/v1/admin/verification-config` | Verification settings |
 
+## Security & privacy
+
+See **[docs/SECURITY.md](docs/SECURITY.md)** for GDPR practices, roles, HTTPS, and credential handling.
+
+- **API docs:** [Swagger UI](/docs) at `/docs` when running
+- **No secrets in frontend** — admin UI uses JWT only; fonio uses server-side `x-api-key`
+- **Roles:** VIEWER (read-only, masked PII) · EDITOR (operations) · ADMIN (full config)
+
 ## Webhooks
 
 - `POST /webhooks/hostaway` — Hostaway unified webhooks (optional Basic Auth)
@@ -112,9 +120,7 @@ Configured for: `vermietung.brainions.digital`
 
 ## GDPR log retention (defaults)
 
-- Debug logs: 14 days
-- Operational logs: 30 days
-- PII-containing metadata: 30 days max (hashed/pseudonymized)
+See `docs/SECURITY.md`. Expired audit logs are purged automatically daily.
 
 ## Project structure
 

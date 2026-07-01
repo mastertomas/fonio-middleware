@@ -2,6 +2,7 @@ const API = '/api/v1/admin';
 const AUTH = '/api/v1/admin/auth';
 
 let token = localStorage.getItem('adminToken') || '';
+let adminRole = localStorage.getItem('adminRole') || '';
 let activeTab = 'dashboard';
 let cachedRules = [];
 let cachedListings = [];
@@ -33,21 +34,52 @@ async function api(path, options = {}) {
     throw new Error(t('session.expired'));
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const msg = Array.isArray(data.message) ? data.message.join(', ') : (data.message || `HTTP ${res.status}`);
+    throw new Error(msg);
+  }
   return data;
 }
 
 function logout() {
   token = '';
+  adminRole = '';
   localStorage.removeItem('adminToken');
+  localStorage.removeItem('adminRole');
   $('#app-screen').classList.add('hidden');
   $('#login-screen').classList.remove('hidden');
+}
+
+function canEdit() {
+  return adminRole === 'EDITOR' || adminRole === 'ADMIN';
+}
+
+function canAdmin() {
+  return adminRole === 'ADMIN';
+}
+
+function applyRoleUi() {
+  const readOnly = !canEdit();
+  $('#sync-btn')?.toggleAttribute('disabled', readOnly);
+  $('#sync-settings-form')?.querySelectorAll('input, button').forEach((el) => {
+    el.toggleAttribute('disabled', !canAdmin());
+  });
+  $('#rule-form')?.querySelectorAll('input, select, button').forEach((el) => {
+    if (el.id === 'rule-delete-btn') el.classList.toggle('hidden', !canAdmin() || !editingRuleId);
+    else el.toggleAttribute('disabled', readOnly);
+  });
+  $('#rule-new-btn')?.toggleAttribute('disabled', readOnly);
+  $('#verification-form')?.querySelectorAll('input, button').forEach((el) => {
+    el.toggleAttribute('disabled', readOnly);
+  });
+  $('#inbox-backfill-btn')?.toggleAttribute('disabled', readOnly);
 }
 
 function showApp() {
   $('#login-screen').classList.add('hidden');
   $('#app-screen').classList.remove('hidden');
   refreshActiveTab();
+  applyRoleUi();
 }
 
 function refreshActiveTab() {
@@ -451,7 +483,9 @@ $('#login-form').addEventListener('submit', async (e) => {
     const data = await res.json();
     if (!res.ok) throw new Error(Array.isArray(data.message) ? data.message.join(', ') : data.message);
     token = data.accessToken;
+    adminRole = data.user?.role ?? '';
     localStorage.setItem('adminToken', token);
+    localStorage.setItem('adminRole', adminRole);
     showApp();
   } catch (ex) {
     err.textContent = ex.message || t('login.failed');

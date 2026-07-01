@@ -1,6 +1,4 @@
 import {
-  CanActivate,
-  ExecutionContext,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -13,26 +11,5 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw err ?? new UnauthorizedException('Admin authentication required');
     }
     return user;
-  }
-}
-
-@Injectable()
-export class AdminRoleGuard implements CanActivate {
-  constructor(private readonly minRole: 'VIEWER' | 'EDITOR' | 'ADMIN' = 'VIEWER') {}
-
-  canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest<{ user?: { role: string } }>();
-    const user = request.user;
-    if (!user) {
-      throw new UnauthorizedException();
-    }
-
-    const order = ['VIEWER', 'EDITOR', 'ADMIN'];
-    const userIdx = order.indexOf(user.role);
-    const minIdx = order.indexOf(this.minRole);
-    if (userIdx < minIdx) {
-      throw new UnauthorizedException('Insufficient permissions');
-    }
-    return true;
   }
 }

@@ -8,16 +8,22 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
-import { ApprovalMode, Prisma, RequestType } from '@prisma/client';
+import { AdminRole, ApprovalMode, Prisma, RequestType } from '@prisma/client';
+import { Request } from 'express';
+import { Roles } from '../common/decorators/roles.decorator';
 import {
   paginated,
   PaginationQueryDto,
 } from '../common/dto/pagination-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { maskReservationForViewer } from '../common/utils/pii.util';
 import { FonioCallContextService } from '../fonio/fonio-call-context.service';
 import { FonioVerificationService } from '../fonio/fonio-verification.service';
 import { HostawayClient } from '../hostaway/hostaway.client';
@@ -34,11 +40,13 @@ import {
   UpdateVerificationConfigDto,
 } from './dto/admin-rules.dto';
 import { UpdateSyncSettingsDto } from './dto/sync-settings.dto';
+import { AdminAuditInterceptor } from '../logging/admin-audit.interceptor';
 
 @ApiTags('admin')
 @ApiBearerAuth()
 @Controller('api/v1/admin')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@UseInterceptors(AdminAuditInterceptor)
 export class AdminController {
   constructor(
     private readonly prisma: PrismaService,
@@ -110,6 +118,7 @@ export class AdminController {
   }
 
   @Patch('sync/settings')
+  @Roles(AdminRole.ADMIN)
   @ApiOperation({ summary: 'Update auto-sync settings' })
   updateSyncSettings(@Body() dto: UpdateSyncSettingsDto) {
     return this.syncSettings.update(dto);
@@ -126,8 +135,11 @@ export class AdminController {
   }
 
   @Get('reservations')
-  @ApiOperation({ summary: 'Synced reservations (paginated, admin contact data)' })
-  async listReservations(@Query() query: PaginationQueryDto) {
+  @ApiOperation({ summary: 'Synced reservations (VIEWER: masked contact data)' })
+  async listReservations(
+    @Query() query: PaginationQueryDto,
+    @Req() req: Request & { user: { role: AdminRole } },
+  ) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 25;
     const where = this.buildReservationSearch(query.search);
@@ -143,22 +155,29 @@ export class AdminController {
         },
       }),
     ]);
-    return paginated(items, total, page, pageSize);
+    const sanitized =
+      req.user.role === AdminRole.VIEWER
+        ? items.map((r) => maskReservationForViewer(r))
+        : items;
+    return paginated(sanitized, total, page, pageSize);
   }
 
   @Get('reservations/:hostawayId/conversation')
+  @Roles(AdminRole.EDITOR)
   @ApiOperation({ summary: 'Refresh and preview Hostaway conversation for a reservation' })
   getReservationConversation(@Param('hostawayId') hostawayId: string) {
     return this.sync.refreshReservationConversation(Number(hostawayId));
   }
 
   @Post('reservations/:hostawayId/refresh-conversation')
+  @Roles(AdminRole.EDITOR)
   @ApiOperation({ summary: 'Re-fetch conversation ID from Hostaway' })
   refreshConversation(@Param('hostawayId') hostawayId: string) {
     return this.sync.refreshReservationConversation(Number(hostawayId));
   }
 
   @Post('sync')
+  @Roles(AdminRole.EDITOR)
   @ApiOperation({ summary: 'Trigger Hostaway full sync (runs in background)' })
   triggerSync() {
     if (this.sync.isSyncInProgress()) {
@@ -178,6 +197,7 @@ export class AdminController {
   }
 
   @Post('sync/register-webhook')
+  @Roles(AdminRole.ADMIN)
   @ApiOperation({
     summary: 'Register production webhook URL in Hostaway via Public API (no dashboard login)',
   })
@@ -236,6 +256,7 @@ export class AdminController {
   }
 
   @Post('rules')
+  @Roles(AdminRole.EDITOR)
   @ApiOperation({ summary: 'Create approval rule' })
   createRule(@Body() dto: CreateApprovalRuleDto) {
     const mode =
@@ -260,6 +281,7 @@ export class AdminController {
   }
 
   @Patch('rules/:id')
+  @Roles(AdminRole.EDITOR)
   @ApiOperation({ summary: 'Update approval rule' })
   async updateRule(@Param('id') id: string, @Body() dto: UpdateApprovalRuleDto) {
     const existing = await this.prisma.approvalRule.findUnique({ where: { id } });
@@ -308,6 +330,7 @@ export class AdminController {
   }
 
   @Delete('rules/:id')
+  @Roles(AdminRole.ADMIN)
   @ApiOperation({ summary: 'Delete approval rule' })
   async deleteRule(@Param('id') id: string) {
     await this.prisma.approvalRule.delete({ where: { id } });
@@ -339,6 +362,7 @@ export class AdminController {
   }
 
   @Patch('verification-config/:id')
+  @Roles(AdminRole.EDITOR)
   @ApiOperation({ summary: 'Update guest verification rules (not approval rules)' })
   async updateVerificationConfig(
     @Param('id') id: string,
@@ -378,12 +402,14 @@ export class AdminController {
   }
 
   @Post('guest-requests/:id/retry-forward')
+  @Roles(AdminRole.EDITOR)
   @ApiOperation({ summary: 'Retry sending a guest request to Hostaway inbox' })
   retryGuestRequestForward(@Param('id') id: string) {
     return this.guestInbox.retryForward(id);
   }
 
   @Post('sync/conversations-backfill')
+  @Roles(AdminRole.EDITOR)
   @ApiOperation({
     summary: 'Link Hostaway conversations to reservations and retry pending inbox forwards',
   })
