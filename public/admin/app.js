@@ -945,15 +945,21 @@ async function loadRequests() {
     r.reservation?.listing?.name,
     r.forwardedToHostaway,
   ].join(' '));
-  const rows = data.items.map((r) => `
+  const rows = data.items.map((r) => {
+    const inboxCell = r.status === 'FORWARDED'
+      ? (r.forwardedToHostaway
+        ? t('requests.inboxYes')
+        : `<button type="button" class="btn ghost btn-sm retry-forward-btn" data-request-id="${r.id}">${t('requests.retry')}</button> <span class="field-hint">${t('requests.inboxPending')}</span>`)
+      : t('requests.inboxNa');
+    return `
     <tr>
       <td>${new Date(r.createdAt).toLocaleString(locale())}</td>
       <td>${t(`requestType.${r.requestType}`) || r.requestType}</td>
       <td><span class="badge manual">${r.status}</span></td>
       <td>${r.reservation?.listing?.name || '–'}</td>
-      <td>${r.forwardedToHostaway ? t('common.yes') : t('common.no')}</td>
-    </tr>
-  `).join('');
+      <td>${inboxCell}</td>
+    </tr>`;
+  }).join('');
   $('#requests-table').innerHTML = `
     <table><thead><tr>
       <th>${t('requests.time')}</th><th>${t('requests.type')}</th><th>${t('requests.status')}</th>
@@ -962,7 +968,37 @@ async function loadRequests() {
     <tbody>${rows || `<tr><td colspan="5">${t('requests.none')}</td></tr>`}</tbody></table>`;
   renderTableInfo('#requests-info', data, data.maxTotal);
   renderPagination('#requests-pagination', data, 'requests', loadRequests);
+  $$('.retry-forward-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        const result = await api(`/guest-requests/${btn.dataset.requestId}/retry-forward`, { method: 'POST' });
+        if (result.forwarded) notify.success(t('requests.retryOk'));
+        else notify.error(t('requests.retryFail', { message: result.error || result.message || 'unknown' }));
+        loadRequests();
+      } catch (ex) {
+        notify.error(t('requests.retryFail', { message: ex.message }));
+      }
+    });
+  });
 }
+
+$('#inbox-backfill-btn')?.addEventListener('click', async () => {
+  const btn = $('#inbox-backfill-btn');
+  btn.disabled = true;
+  try {
+    const result = await api('/sync/conversations-backfill', { method: 'POST' });
+    notify.success(t('requests.backfillDone', {
+      linked: result.linked ?? 0,
+      succeeded: result.inboxRetries?.succeeded ?? 0,
+      attempted: result.inboxRetries?.attempted ?? 0,
+    }));
+    loadRequests();
+  } catch (ex) {
+    notify.error(ex.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 async function loadLogs() {
   const logs = await api('/logs');

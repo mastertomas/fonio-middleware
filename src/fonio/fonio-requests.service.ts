@@ -9,7 +9,7 @@ import {
   RequestType,
 } from '@prisma/client';
 import { hashValue } from '../common/utils/crypto.util';
-import { HostawayMessagingService } from '../hostaway/hostaway-messaging.service';
+import { GuestRequestInboxService } from '../hostaway/guest-request-inbox.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RulesService } from '../rules/rules.service';
 import { GuestRequestDto } from './dto/guest-request.dto';
@@ -21,7 +21,7 @@ export class FonioRequestsService {
     private readonly prisma: PrismaService,
     private readonly verification: FonioVerificationService,
     private readonly rules: RulesService,
-    private readonly messaging: HostawayMessagingService,
+    private readonly inbox: GuestRequestInboxService,
   ) {}
 
   async handleRequest(dto: GuestRequestDto, callerPhone?: string) {
@@ -75,51 +75,71 @@ export class FonioRequestsService {
       },
     });
 
-    let hostawayMessageId: number | undefined;
+    let forwardResult: Awaited<
+      ReturnType<GuestRequestInboxService['forwardGuestRequest']>
+    > | null = null;
 
-    if (
-      status === RequestStatus.FORWARDED &&
-      reservation.hostawayConversationId
-    ) {
-      hostawayMessageId = await this.messaging.forwardRequestToInbox({
-        conversationId: reservation.hostawayConversationId,
+    if (status === RequestStatus.FORWARDED) {
+      forwardResult = await this.inbox.forwardGuestRequest({
         guestRequestId: guestRequest.id,
+        reservationHostawayId: reservation.hostawayId,
         requestType: dto.requestType,
-        summary: this.buildSummary(dto, reservation.listing.name),
+        listingName: reservation.listing.name,
+        summaryLines: this.buildSummaryLines(dto, reservation.listing.name),
+        ruleReason: evaluation.reason,
         callerNote: dto.details?.note as string | undefined,
       });
-
-      await this.prisma.guestRequest.update({
-        where: { id: guestRequest.id },
-        data: {
-          forwardedToHostaway: true,
-          hostawayMessageId,
-        },
-      });
     }
+
+    const forwardedToHostaway = forwardResult?.forwarded ?? false;
+    const inboxPending = forwardResult?.inboxPending ?? false;
 
     return {
       requestId: guestRequest.id,
       status,
       autoApproved: status === RequestStatus.AUTO_APPROVED,
       forwardedToTeam: status === RequestStatus.FORWARDED,
-      message:
-        status === RequestStatus.AUTO_APPROVED
-          ? 'Request approved automatically'
-          : status === RequestStatus.REJECTED
-            ? 'Request cannot be approved automatically'
-            : 'Request forwarded to your team in Hostaway',
+      forwardedToHostaway,
+      inboxPending,
+      hostawayMessageId: forwardResult?.messageId,
+      message: this.buildGuestMessage(status, forwardedToHostaway, inboxPending),
       reason: evaluation.reason,
     };
   }
 
-  private buildSummary(dto: GuestRequestDto, listingName: string): string {
-    const lines = [`Unterkunft: ${listingName}`, `Reservierung: ${dto.reservationId}`];
+  private buildGuestMessage(
+    status: RequestStatus,
+    forwardedToHostaway: boolean,
+    inboxPending: boolean,
+  ): string {
+    if (status === RequestStatus.AUTO_APPROVED) {
+      return 'Request approved automatically';
+    }
+    if (status === RequestStatus.REJECTED) {
+      return 'Request cannot be approved automatically';
+    }
+    if (forwardedToHostaway) {
+      return 'Request forwarded to your team in Hostaway inbox';
+    }
+    if (inboxPending) {
+      return 'Request recorded — team will be notified in Hostaway when the conversation is available';
+    }
+    return 'Request forwarded to your team';
+  }
+
+  private buildSummaryLines(
+    dto: GuestRequestDto,
+    listingName: string,
+  ): string[] {
+    const lines = [
+      `Unterkunft: ${listingName}`,
+      `Reservierung: ${dto.reservationId}`,
+    ];
     if (dto.details) {
       for (const [key, value] of Object.entries(dto.details)) {
         lines.push(`${key}: ${String(value)}`);
       }
     }
-    return lines.join('\n');
+    return lines;
   }
 }

@@ -5,6 +5,8 @@ import { mapWithConcurrency } from '../common/utils/concurrency.util';
 import { hashPhoneForStorage, hashValue, maskGuestName } from '../common/utils/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { HostawayClient } from './hostaway.client';
+import { HostawayConversationService } from './hostaway-conversation.service';
+import { GuestRequestInboxService } from './guest-request-inbox.service';
 import { HostawayCalendarDay, HostawayReservation } from './hostaway.types';
 import { EXCLUDED_LISTING_IDS } from './listing-hierarchy.config';
 import { ListingHierarchyService } from './listing-hierarchy.service';
@@ -19,6 +21,8 @@ export class HostawaySyncService implements OnModuleInit {
     private readonly hostaway: HostawayClient,
     private readonly hierarchy: ListingHierarchyService,
     private readonly config: ConfigService,
+    private readonly conversations: HostawayConversationService,
+    private readonly guestInbox: GuestRequestInboxService,
   ) {}
 
   async onModuleInit() {
@@ -66,11 +70,13 @@ export class HostawaySyncService implements OnModuleInit {
       });
 
       const reservations = await this.syncAllReservations(job.id);
+      const conversationBackfill = await this.maybeBackfillConversations();
       await this.updateJobProgress(job.id, {
         phase: 'calendars',
         listings,
         reservations,
         removedListings,
+        conversationBackfill,
       });
 
       const calendarDays = await this.syncAllCalendars(job.id);
@@ -346,7 +352,18 @@ export class HostawaySyncService implements OnModuleInit {
       arrivalStartDate: format(past),
       arrivalEndDate: format(future),
     });
-    return this.upsertReservations(reservations);
+    const count = await this.upsertReservations(reservations);
+    await this.maybeBackfillConversations();
+    return count;
+  }
+
+  private async maybeBackfillConversations() {
+    if (this.config.get('CONVERSATION_BACKFILL_ON_SYNC') === 'false') {
+      return { linked: 0, stillMissing: 0, skipped: true };
+    }
+    const linked = await this.conversations.backfillMissing();
+    const inboxRetries = await this.guestInbox.retryPendingForwards();
+    return { ...linked, inboxRetries };
   }
 
   private async upsertReservations(
@@ -442,15 +459,10 @@ export class HostawaySyncService implements OnModuleInit {
 
   async refreshReservationConversation(hostawayReservationId: number) {
     const conversationId =
-      await this.hostaway.findConversationByReservation(hostawayReservationId);
+      await this.conversations.resolveConversationId(hostawayReservationId);
     if (!conversationId) {
       return { hostawayConversationId: null, messages: [] };
     }
-
-    await this.prisma.reservation.update({
-      where: { hostawayId: hostawayReservationId },
-      data: { hostawayConversationId: conversationId, lastSyncedAt: new Date() },
-    });
 
     const messages = await this.hostaway.getConversationMessages(conversationId, 50);
     return { hostawayConversationId: conversationId, messages };

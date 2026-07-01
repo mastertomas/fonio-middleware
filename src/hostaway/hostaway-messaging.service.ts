@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { RequestType } from '@prisma/client';
 import { HostawayClient } from './hostaway.client';
 
 @Injectable()
@@ -10,14 +11,18 @@ export class HostawayMessagingService {
   async forwardRequestToInbox(params: {
     conversationId: number;
     guestRequestId: string;
-    requestType: string;
+    requestType: RequestType | string;
+    requestTypeLabel?: string;
     summary: string;
+    ruleReason?: string;
     callerNote?: string;
   }): Promise<number> {
+    const typeLabel = params.requestTypeLabel ?? String(params.requestType);
     const body = [
       '[fonio.ai – Gästeanfrage]',
       `Anfrage-ID: ${params.guestRequestId}`,
-      `Typ: ${params.requestType}`,
+      `Typ: ${typeLabel}`,
+      params.ruleReason ? `Grund: ${params.ruleReason}` : '',
       '',
       params.summary,
       params.callerNote ? `\nAnrufer-Hinweis: ${params.callerNote}` : '',
@@ -34,7 +39,7 @@ export class HostawayMessagingService {
     );
 
     this.logger.log(
-      `Forwarded request ${params.guestRequestId} to conversation ${params.conversationId}`,
+      `Forwarded request ${params.guestRequestId} to conversation ${params.conversationId} (message ${messageId})`,
     );
     return messageId;
   }

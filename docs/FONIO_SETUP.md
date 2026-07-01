@@ -85,7 +85,19 @@ Use a real `hostawayId` from **Admin → Reservations**.
 2. **Availability question** → fonio calls `GET /availability?city=Stuttgart&checkIn=...`
 3. **Existing guest** → fonio asks reservation ID + dates → `POST /guest/verify`
 4. **Guest request** (pet, extra guest) → `POST /guest/requests` with `verificationToken`
-5. **Manual requests** → forwarded to Hostaway inbox automatically
+5. **Manual requests** → posted to the Hostaway guest conversation inbox (middleware looks up conversation automatically)
+
+## Hostaway inbox forwarding
+
+When a request is not auto-approved (`FORWARDED` status), the middleware:
+
+1. Resolves the Hostaway **conversation ID** for the reservation (cached or live API lookup)
+2. Posts a German message to the guest conversation via Hostaway API
+3. Your team sees it in Hostaway inbox as usual
+
+If no conversation exists yet, the request is stored as **pending** — run **Admin → Guest requests → Link inbox & retry pending** or wait for the next sync (conversation backfill).
+
+Message format: `[fonio.ai – Gästeanfrage]` + request type + rule reason + guest details.
 
 ## View API activity
 

@@ -173,7 +173,7 @@ These environment variables control sync and availability throughput. Defaults a
 - Availability API: one calendar query for all listings + parallel stale refreshes (was N queries per listing)
 - Listing sync: parallel upserts with preloaded groups
 
-Conversation IDs are **not** fetched during bulk reservation sync (too slow). Use admin **Conversations → View** or webhook partial sync to link inboxes when needed.
+Conversation IDs are **not** fetched during bulk reservation sync (too slow). After sync, conversation backfill runs automatically (`CONVERSATION_BACKFILL_ON_SYNC`). Admin: **Guest requests → Link inbox & retry pending**.
 
 ## Troubleshooting
 

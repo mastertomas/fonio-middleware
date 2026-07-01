@@ -21,6 +21,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { FonioCallContextService } from '../fonio/fonio-call-context.service';
 import { FonioVerificationService } from '../fonio/fonio-verification.service';
 import { HostawayClient } from '../hostaway/hostaway.client';
+import { HostawayConversationService } from '../hostaway/hostaway-conversation.service';
+import { GuestRequestInboxService } from '../hostaway/guest-request-inbox.service';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { SyncSettingsService } from '../hostaway/sync-settings.service';
 import { getConditionFieldSchema } from '../rules/approval-conditions';
@@ -46,6 +48,8 @@ export class AdminController {
     private readonly hostaway: HostawayClient,
     private readonly config: ConfigService,
     private readonly rules: RulesService,
+    private readonly conversations: HostawayConversationService,
+    private readonly guestInbox: GuestRequestInboxService,
   ) {}
 
   @Get('listings')
@@ -363,8 +367,30 @@ export class AdminController {
     return this.prisma.guestRequest.findMany({
       take: 100,
       orderBy: { createdAt: 'desc' },
-      include: { reservation: { include: { listing: true } } },
+      include: {
+        reservation: {
+          include: {
+            listing: true,
+          },
+        },
+      },
     });
+  }
+
+  @Post('guest-requests/:id/retry-forward')
+  @ApiOperation({ summary: 'Retry sending a guest request to Hostaway inbox' })
+  retryGuestRequestForward(@Param('id') id: string) {
+    return this.guestInbox.retryForward(id);
+  }
+
+  @Post('sync/conversations-backfill')
+  @ApiOperation({
+    summary: 'Link Hostaway conversations to reservations and retry pending inbox forwards',
+  })
+  async backfillConversations() {
+    const linked = await this.conversations.backfillMissing();
+    const retries = await this.guestInbox.retryPendingForwards();
+    return { ...linked, inboxRetries: retries };
   }
 
   @Get('logs')

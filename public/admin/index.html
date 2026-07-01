@@ -215,7 +215,11 @@
       </section>
 
       <section id="tab-requests" class="tab hidden">
-        <header class="page-header"><h2 data-i18n="requests.title">Guest requests</h2></header>
+        <header class="page-header">
+          <h2 data-i18n="requests.title">Guest requests</h2>
+          <button type="button" id="inbox-backfill-btn" class="btn ghost" data-i18n="requests.backfillBtn">Link Hostaway inbox &amp; retry</button>
+        </header>
+        <p class="field-hint" data-i18n="requests.hint">Manual requests are posted to the Hostaway guest conversation. Use retry if forwarding failed.</p>
         <div id="requests-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="requests-table"></div>
         <div id="requests-info" class="table-info"></div>
