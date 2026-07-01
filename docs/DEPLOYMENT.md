@@ -154,6 +154,27 @@ ngrok http 3000
 
 Use the ngrok HTTPS URL as `APP_URL` in `.env` and configure fonio with that base URL.
 
+## Performance tuning (optional)
+
+These environment variables control sync and availability throughput. Defaults are safe for Hostaway API rate limits.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CALENDAR_SYNC_DAYS` | `365` | Days ahead to sync per listing |
+| `CALENDAR_SYNC_CONCURRENCY` | `3` | Parallel Hostaway calendar fetches during full sync |
+| `CALENDAR_SYNC_DELAY_MS` | `100` | Pause between calendar API calls (per worker) |
+| `RESERVATION_SYNC_BATCH_SIZE` | `50` | DB transaction batch size for reservation upserts |
+| `AVAILABILITY_SYNC_CONCURRENCY` | `3` | Parallel live calendar refreshes during fonio availability calls |
+| `SYNC_INTERVAL_MINUTES` | `30` | Auto-sync interval (admin dashboard can override) |
+
+**What was optimized:**
+- Reservation sync: one listing lookup + batched DB writes (was ~2 queries × 2400 reservations)
+- Calendar sync: parallel listings + batched day upserts (was sequential with 250ms pause each)
+- Availability API: one calendar query for all listings + parallel stale refreshes (was N queries per listing)
+- Listing sync: parallel upserts with preloaded groups
+
+Conversation IDs are **not** fetched during bulk reservation sync (too slow). Use admin **Conversations → View** or webhook partial sync to link inboxes when needed.
+
 ## Troubleshooting
 
 | Issue | Fix |

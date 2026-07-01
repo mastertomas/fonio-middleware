@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AvailabilityMode, Listing, ListingGroup, Prisma } from '@prisma/client';
+import { mapWithConcurrency } from '../common/utils/concurrency.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { AvailabilityQueryDto } from './dto/availability-query.dto';
@@ -20,9 +22,12 @@ type ListingWithGroup = Listing & { listingGroup: ListingGroup | null };
 
 @Injectable()
 export class FonioAvailabilityService {
+  private readonly cacheMaxAgeMs = 6 * 60 * 60 * 1000;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sync: HostawaySyncService,
+    private readonly config: ConfigService,
   ) {}
 
   async search(query: AvailabilityQueryDto): Promise<AvailabilityResultItem[]> {
@@ -59,35 +64,68 @@ export class FonioAvailabilityService {
     });
 
     const candidates = listings.filter((l) => this.isVisibleForGroupMode(l));
-    const results: AvailabilityResultItem[] = [];
+    if (candidates.length === 0) return [];
 
-    for (const listing of candidates) {
-      const cached = await this.prisma.calendarDay.findFirst({
-        where: { listingId: listing.id, date: { in: nights } },
-        orderBy: { syncedAt: 'desc' },
-      });
-      const cacheMaxAgeMs = 6 * 60 * 60 * 1000;
-      const cacheFresh =
-        cached && Date.now() - cached.syncedAt.getTime() < cacheMaxAgeMs;
+    const listingIds = candidates.map((l) => l.id);
+    const cachedDays = await this.prisma.calendarDay.findMany({
+      where: {
+        listingId: { in: listingIds },
+        date: { in: nights },
+      },
+    });
 
-      if (!cacheFresh) {
-        await this.sync.syncListingCalendar(
-          listing.hostawayId,
-          query.checkIn,
-          query.checkOut,
-        );
+    const daysByListing = new Map<string, typeof cachedDays>();
+    const latestSyncByListing = new Map<string, Date>();
+    for (const day of cachedDays) {
+      const bucket = daysByListing.get(day.listingId) ?? [];
+      bucket.push(day);
+      daysByListing.set(day.listingId, bucket);
+
+      const prev = latestSyncByListing.get(day.listingId);
+      if (!prev || day.syncedAt > prev) {
+        latestSyncByListing.set(day.listingId, day.syncedAt);
       }
+    }
 
-      const days = await this.prisma.calendarDay.findMany({
-        where: {
-          listingId: listing.id,
-          date: { in: nights },
-        },
-      });
+    const staleListings = candidates.filter((listing) => {
+      const latest = latestSyncByListing.get(listing.id);
+      const hasAllNights = (daysByListing.get(listing.id)?.length ?? 0) >= nights.length;
+      const cacheFresh =
+        latest && Date.now() - latest.getTime() < this.cacheMaxAgeMs;
+      return !hasAllNights || !cacheFresh;
+    });
 
-      const available = this.isStayAvailable(days, nights.length);
+    const syncConcurrency = Number(
+      this.config.get('AVAILABILITY_SYNC_CONCURRENCY') ?? 3,
+    );
+    await mapWithConcurrency(staleListings, syncConcurrency, async (listing) => {
+      await this.sync.syncListingCalendar(
+        listing.hostawayId,
+        query.checkIn,
+        query.checkOut,
+      );
+    });
 
-      results.push({
+    const refreshedDays =
+      staleListings.length > 0
+        ? await this.prisma.calendarDay.findMany({
+            where: {
+              listingId: { in: listingIds },
+              date: { in: nights },
+            },
+          })
+        : cachedDays;
+
+    const refreshedByListing = new Map<string, typeof refreshedDays>();
+    for (const day of refreshedDays) {
+      const bucket = refreshedByListing.get(day.listingId) ?? [];
+      bucket.push(day);
+      refreshedByListing.set(day.listingId, bucket);
+    }
+
+    const results: AvailabilityResultItem[] = candidates.map((listing) => {
+      const days = refreshedByListing.get(listing.id) ?? [];
+      return {
         listingId: listing.hostawayId,
         name: listing.name,
         city: listing.city,
@@ -95,10 +133,10 @@ export class FonioAvailabilityService {
         bedrooms: listing.bedroomsNumber,
         roomType: listing.roomType,
         petsAllowed: listing.petsAllowed,
-        available,
+        available: this.isStayAvailable(days, nights.length),
         groupName: listing.listingGroup?.name ?? null,
-      });
-    }
+      };
+    });
 
     const sorted = results.sort((a, b) => Number(b.available) - Number(a.available));
     if (query.availableOnly) {
