@@ -184,9 +184,11 @@ function tableQuery(tabKey) {
   return params.toString();
 }
 
-function renderTableToolbar(toolbarId, tabKey, loader) {
+function ensureTableToolbar(toolbarId, tabKey, loader) {
   const el = $(toolbarId);
   if (!el) return;
+  if (el.dataset.toolbarInit === tabKey) return;
+  el.dataset.toolbarInit = tabKey;
   const s = tableState[tabKey];
   el.innerHTML = `
     <div class="table-length">
@@ -219,6 +221,12 @@ function renderTableToolbar(toolbarId, tabKey, loader) {
       tableState[tabKey].page = 1;
       loader();
     }, 300);
+  });
+}
+
+function resetTableToolbars() {
+  document.querySelectorAll('[data-toolbar-init]').forEach((el) => {
+    delete el.dataset.toolbarInit;
   });
 }
 
@@ -496,6 +504,7 @@ $$('.lang-select').forEach((sel) => {
 });
 
 document.addEventListener('langchange', () => {
+  resetTableToolbars();
   refreshActiveTab();
   updateRuleFormUI();
   renderRuleConditionsPanel();
@@ -728,7 +737,7 @@ async function loadDashboard() {
     ? t('dashboard.autoSyncNext', { minutes: settings.intervalMinutes })
     : t('dashboard.autoSyncOff');
 
-  renderTableToolbar('#webhooks-toolbar', 'webhooks', loadDashboard);
+  ensureTableToolbar('#webhooks-toolbar', 'webhooks', loadDashboard);
   const webhookData = paginateClient(webhooks, 'webhooks', (w) => [
     w.startedAt,
     w.jobType,
@@ -759,7 +768,7 @@ async function loadDashboard() {
 }
 
 async function loadListings() {
-  renderTableToolbar('#listings-toolbar', 'listings', loadListings);
+  ensureTableToolbar('#listings-toolbar', 'listings', loadListings);
   const data = await api(`/listings?${tableQuery('listings')}`);
   const rows = data.items.map((l) => `
     <tr>
@@ -782,7 +791,7 @@ async function loadListings() {
 }
 
 async function loadGroups() {
-  renderTableToolbar('#groups-toolbar', 'groups', loadGroups);
+  ensureTableToolbar('#groups-toolbar', 'groups', loadGroups);
   const data = await api(`/listing-groups?${tableQuery('groups')}`);
   const rows = data.items.map((g) => `
     <tr>
@@ -804,7 +813,7 @@ async function loadGroups() {
 }
 
 async function loadReservations() {
-  renderTableToolbar('#reservations-toolbar', 'reservations', loadReservations);
+  ensureTableToolbar('#reservations-toolbar', 'reservations', loadReservations);
   const data = await api(`/reservations?${tableQuery('reservations')}`);
   const rows = data.items.map((r) => `
     <tr>
@@ -830,7 +839,7 @@ async function loadReservations() {
 }
 
 async function loadConversations() {
-  renderTableToolbar('#conversations-toolbar', 'conversations', loadConversations);
+  ensureTableToolbar('#conversations-toolbar', 'conversations', loadConversations);
   const data = await api(`/reservations?${tableQuery('conversations')}`);
   const rows = data.items.map((r) => `
     <tr>
@@ -984,7 +993,7 @@ async function loadRules() {
   populateListingSelect();
   renderVerificationForm(config, fieldMeta);
 
-  renderTableToolbar('#rules-toolbar', 'rules', loadRules);
+  ensureTableToolbar('#rules-toolbar', 'rules', loadRules);
   const data = paginateClient(rules, 'rules', (r) => [
     r.requestType,
     r.mode,
@@ -1021,7 +1030,7 @@ async function loadRules() {
 
 async function loadRequests() {
   const requests = await api('/guest-requests');
-  renderTableToolbar('#requests-toolbar', 'requests', loadRequests);
+  ensureTableToolbar('#requests-toolbar', 'requests', loadRequests);
   const data = paginateClient(requests, 'requests', (r) => [
     r.createdAt,
     r.requestType,
@@ -1086,7 +1095,7 @@ $('#inbox-backfill-btn')?.addEventListener('click', async () => {
 
 async function loadLogs() {
   const logs = await api('/logs');
-  renderTableToolbar('#logs-toolbar', 'logs', loadLogs);
+  ensureTableToolbar('#logs-toolbar', 'logs', loadLogs);
   const data = paginateClient(logs, 'logs', (l) => [
     l.createdAt,
     l.source,
