@@ -171,6 +171,7 @@
                 <option value="EARLY_CHECKIN">EARLY_CHECKIN</option>
                 <option value="LATE_CHECKOUT">LATE_CHECKOUT</option>
                 <option value="RESERVATION_QUESTION">RESERVATION_QUESTION</option>
+                <option value="OTHER">OTHER</option>
               </select>
             </label>
             <label><span data-i18n="rules.mode">Mode</span>
@@ -188,6 +189,15 @@
             <label><span data-i18n="rules.priority">Priority</span>
               <input type="number" id="rule-priority" value="0" min="0" />
               <span class="field-hint" data-i18n="rules.priorityHint">Higher number wins when multiple rules match.</span>
+            </label>
+            <fieldset id="rule-conditions-panel" class="rule-conditions hidden">
+              <legend data-i18n="rules.conditionsTitle">Conditions (AUTO mode)</legend>
+              <p id="rule-conditions-note" class="field-hint hidden"></p>
+              <div id="rule-conditions-fields" class="conditions-fields"></div>
+            </fieldset>
+            <label class="checkbox-row rule-active-row">
+              <input type="checkbox" id="rule-active" checked />
+              <span data-i18n="rules.isActive">Rule active</span>
             </label>
             <div class="form-actions">
               <span class="field-label" aria-hidden="true">&nbsp;</span>

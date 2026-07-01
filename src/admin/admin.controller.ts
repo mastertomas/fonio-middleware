@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -11,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
+import { ApprovalMode, Prisma, RequestType } from '@prisma/client';
 import {
   paginated,
   PaginationQueryDto,
@@ -22,6 +23,8 @@ import { FonioVerificationService } from '../fonio/fonio-verification.service';
 import { HostawayClient } from '../hostaway/hostaway.client';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { SyncSettingsService } from '../hostaway/sync-settings.service';
+import { getConditionFieldSchema } from '../rules/approval-conditions';
+import { RulesService } from '../rules/rules.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateApprovalRuleDto,
@@ -42,6 +45,7 @@ export class AdminController {
     private readonly fonioSetup: FonioCallContextService,
     private readonly hostaway: HostawayClient,
     private readonly config: ConfigService,
+    private readonly rules: RulesService,
   ) {}
 
   @Get('listings')
@@ -212,6 +216,12 @@ export class AdminController {
     };
   }
 
+  @Get('rules/condition-fields')
+  @ApiOperation({ summary: 'Condition field schema per request type (for admin UI)' })
+  getRuleConditionFields() {
+    return getConditionFieldSchema();
+  }
+
   @Get('rules')
   @ApiOperation({ summary: 'List approval rules' })
   listRules() {
@@ -224,12 +234,21 @@ export class AdminController {
   @Post('rules')
   @ApiOperation({ summary: 'Create approval rule' })
   createRule(@Body() dto: CreateApprovalRuleDto) {
+    const mode =
+      dto.requestType === RequestType.CANCELLATION &&
+      dto.mode === ApprovalMode.AUTO
+        ? ApprovalMode.MANUAL
+        : dto.mode;
     return this.prisma.approvalRule.create({
       data: {
         listingId: dto.listingId || null,
         requestType: dto.requestType,
-        mode: dto.mode,
-        conditions: dto.conditions as Prisma.InputJsonValue | undefined,
+        mode,
+        conditions: this.rules.sanitizeRuleConditions(
+          dto.requestType,
+          mode,
+          dto.conditions,
+        ),
         priority: dto.priority ?? 0,
         isActive: dto.isActive ?? true,
       },
@@ -238,16 +257,48 @@ export class AdminController {
 
   @Patch('rules/:id')
   @ApiOperation({ summary: 'Update approval rule' })
-  updateRule(@Param('id') id: string, @Body() dto: UpdateApprovalRuleDto) {
+  async updateRule(@Param('id') id: string, @Body() dto: UpdateApprovalRuleDto) {
+    const existing = await this.prisma.approvalRule.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Rule not found');
+
+    const requestType = dto.requestType ?? existing.requestType;
+    let mode = dto.mode ?? existing.mode;
+    if (
+      requestType === RequestType.CANCELLATION &&
+      mode === ApprovalMode.AUTO
+    ) {
+      mode = ApprovalMode.MANUAL;
+    }
+
+    const conditionsInput =
+      dto.conditions !== undefined
+        ? dto.conditions
+        : (existing.conditions as Record<string, unknown> | null) ?? undefined;
+    const shouldUpdateConditions =
+      dto.conditions !== undefined ||
+      dto.mode !== undefined ||
+      dto.requestType !== undefined;
+
+    const { conditions: _c, ...rest } = dto;
+
     return this.prisma.approvalRule.update({
       where: { id },
       data: {
-        ...dto,
+        ...rest,
+        mode,
         listingId:
           dto.listingId === undefined
             ? undefined
             : dto.listingId || null,
-        conditions: dto.conditions as Prisma.InputJsonValue | undefined,
+        ...(shouldUpdateConditions
+          ? {
+              conditions: this.rules.sanitizeRuleConditions(
+                requestType,
+                mode,
+                conditionsInput,
+              ),
+            }
+          : {}),
       },
     });
   }

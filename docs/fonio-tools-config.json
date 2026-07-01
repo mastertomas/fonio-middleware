@@ -45,9 +45,9 @@
       "urlPath": "/api/v1/fonio/guest/requests",
       "bodyExample": {
         "reservationId": 62144308,
-        "requestType": "ADD_PET",
+        "requestType": "EARLY_CHECKIN",
         "verificationToken": "FROM_VERIFY_RESPONSE",
-        "details": { "note": "Kleiner Hund" }
+        "details": { "requestedTime": "15:00", "note": "Geschäftstermin" }
       },
       "requestTypes": [
         "ADD_GUEST",

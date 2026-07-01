@@ -740,6 +740,35 @@ body.modal-open {
   margin-top: 0.35rem;
 }
 
+.rule-conditions {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 0 0 1rem;
+}
+
+.rule-conditions legend {
+  font-weight: 600;
+  padding: 0 0.35rem;
+}
+
+.conditions-fields {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.cond-field input[type="time"],
+.cond-field input[type="number"] {
+  display: block;
+  width: 100%;
+  max-width: 200px;
+  margin-top: 0.35rem;
+}
+
+.rule-active-row {
+  margin-bottom: 1rem;
+}
+
 .modal-wide {
   max-width: 640px;
   max-height: 85vh;

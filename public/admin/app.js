@@ -5,6 +5,7 @@ let token = localStorage.getItem('adminToken') || '';
 let activeTab = 'dashboard';
 let cachedRules = [];
 let cachedListings = [];
+let cachedConditionSchema = null;
 let editingRuleId = null;
 let dashboardPoll = null;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -299,7 +300,7 @@ function renderConversationMessage(message) {
 function updateRuleSelects() {
   const types = [
     'ADD_GUEST', 'ADD_PET', 'CANCELLATION', 'MODIFICATION',
-    'EARLY_CHECKIN', 'LATE_CHECKOUT', 'RESERVATION_QUESTION',
+    'EARLY_CHECKIN', 'LATE_CHECKOUT', 'RESERVATION_QUESTION', 'OTHER',
   ];
   const modes = ['AUTO', 'MANUAL', 'DENY'];
   const typeSel = $('#rule-type');
@@ -315,7 +316,114 @@ function updateRuleSelects() {
   ).join('');
   typeSel.value = types.includes(curType) ? curType : types[0];
   modeSel.value = modes.includes(curMode) ? curMode : modes[0];
+  syncRuleModeForType();
+  renderRuleConditionsPanel();
 }
+
+function syncRuleModeForType() {
+  const type = $('#rule-type')?.value;
+  const modeSel = $('#rule-mode');
+  if (!modeSel) return;
+  const autoOpt = modeSel.querySelector('option[value="AUTO"]');
+  if (autoOpt) autoOpt.disabled = type === 'CANCELLATION';
+  if (type === 'CANCELLATION' && modeSel.value === 'AUTO') modeSel.value = 'MANUAL';
+}
+
+function renderRuleConditionsPanel() {
+  const panel = $('#rule-conditions-panel');
+  const note = $('#rule-conditions-note');
+  const fields = $('#rule-conditions-fields');
+  if (!panel || !note || !fields) return;
+
+  const type = $('#rule-type')?.value;
+  const mode = $('#rule-mode')?.value;
+  const schema = cachedConditionSchema?.[type];
+  const showAuto = mode === 'AUTO' && type !== 'CANCELLATION';
+
+  panel.classList.toggle('hidden', !schema && !showAuto);
+  note.classList.add('hidden');
+  fields.innerHTML = '';
+
+  if (!schema) return;
+
+  if (schema.noteKey) {
+    note.textContent = t(schema.noteKey);
+    note.classList.remove('hidden');
+  }
+
+  if (!showAuto) {
+    panel.classList.remove('hidden');
+    return;
+  }
+
+  panel.classList.remove('hidden');
+  fields.innerHTML = (schema.fields || []).map((field) => {
+    const id = `rule-cond-${field.key}`;
+    const label = t(field.labelKey);
+    const hint = field.hintKey ? t(field.hintKey) : '';
+    if (field.type === 'boolean') {
+      return `
+        <label class="checkbox-row">
+          <input type="checkbox" id="${id}" data-cond-key="${field.key}" data-cond-type="boolean" />
+          <span><strong>${label}</strong>${hint ? `<br><span class="field-hint">${esc(hint)}</span>` : ''}</span>
+        </label>`;
+    }
+    const inputType = field.type === 'time' ? 'time' : 'number';
+    const step = field.type === 'time' ? '' : ' min="1"';
+    const defaultVal = field.default ?? '';
+    return `
+      <label class="cond-field">
+        <span>${label}</span>
+        <input type="${inputType}" id="${id}" data-cond-key="${field.key}" data-cond-type="${field.type}"${step} value="${defaultVal}" />
+        ${hint ? `<span class="field-hint">${esc(hint)}</span>` : ''}
+      </label>`;
+  }).join('');
+}
+
+function buildConditionsFromForm() {
+  const mode = $('#rule-mode')?.value;
+  const type = $('#rule-type')?.value;
+  if (mode !== 'AUTO' || type === 'CANCELLATION') return undefined;
+
+  const schema = cachedConditionSchema?.[type];
+  if (!schema?.fields?.length) return undefined;
+
+  const conditions = {};
+  schema.fields.forEach((field) => {
+    const el = $(`#rule-cond-${field.key}`);
+    if (!el) return;
+    if (field.type === 'boolean') {
+      if (el.checked) conditions[field.key] = true;
+      return;
+    }
+    const val = el.value?.trim();
+    if (val) conditions[field.key] = field.type === 'number' ? Number(val) : val;
+  });
+  return Object.keys(conditions).length ? conditions : {};
+}
+
+function loadConditionsIntoForm(conditions) {
+  const type = $('#rule-type')?.value;
+  renderRuleConditionsPanel();
+  const schema = cachedConditionSchema?.[type];
+  if (!schema?.fields) return;
+  const c = conditions || {};
+  schema.fields.forEach((field) => {
+    const el = $(`#rule-cond-${field.key}`);
+    if (!el) return;
+    if (field.type === 'boolean') {
+      el.checked = Boolean(c[field.key]);
+    } else if (c[field.key] !== undefined && c[field.key] !== null) {
+      el.value = String(c[field.key]);
+    }
+  });
+}
+
+$('#rule-type')?.addEventListener('change', () => {
+  syncRuleModeForType();
+  renderRuleConditionsPanel();
+});
+$('#rule-mode')?.addEventListener('change', renderRuleConditionsPanel);
 
 $$('.lang-select').forEach((sel) => {
   sel.addEventListener('change', () => setLang(sel.value));
@@ -324,6 +432,7 @@ $$('.lang-select').forEach((sel) => {
 document.addEventListener('langchange', () => {
   refreshActiveTab();
   updateRuleFormUI();
+  renderRuleConditionsPanel();
 });
 
 $('#login-form').addEventListener('submit', async (e) => {
@@ -409,8 +518,10 @@ $('#rule-form').addEventListener('submit', async (e) => {
     mode: $('#rule-mode').value,
     listingId: $('#rule-listing').value || null,
     priority: Number($('#rule-priority').value),
-    isActive: true,
+    isActive: $('#rule-active').checked,
   };
+  const conditions = buildConditionsFromForm();
+  if (conditions !== undefined) payload.conditions = conditions;
   try {
     if (editingRuleId) {
       await api(`/rules/${editingRuleId}`, { method: 'PATCH', body: JSON.stringify(payload) });
@@ -460,6 +571,9 @@ function resetRuleForm() {
   $('#rule-mode').value = 'MANUAL';
   $('#rule-listing').value = '';
   $('#rule-priority').value = 0;
+  $('#rule-active').checked = true;
+  syncRuleModeForType();
+  renderRuleConditionsPanel();
   updateRuleFormUI();
   highlightSelectedRule(null);
 }
@@ -471,6 +585,9 @@ function loadRuleIntoForm(rule) {
   $('#rule-mode').value = rule.mode;
   $('#rule-listing').value = rule.listingId || '';
   $('#rule-priority').value = rule.priority;
+  $('#rule-active').checked = rule.isActive !== false;
+  syncRuleModeForType();
+  loadConditionsIntoForm(rule.conditions);
   updateRuleFormUI();
   highlightSelectedRule(rule.id);
 }
@@ -770,13 +887,15 @@ $('#verification-form')?.addEventListener('submit', async (e) => {
 });
 
 async function loadRules() {
-  const [rules, config, fieldMeta, listingsData] = await Promise.all([
+  const [rules, config, fieldMeta, listingsData, conditionSchema] = await Promise.all([
     api('/rules'),
     api('/verification-config'),
     api('/verification-config/fields'),
     api('/listings?pageSize=100'),
+    api('/rules/condition-fields'),
   ]);
   cachedRules = rules;
+  cachedConditionSchema = conditionSchema;
   cachedListings = listingsData.items || listingsData;
   populateListingSelect();
   renderVerificationForm(config, fieldMeta);
@@ -811,6 +930,7 @@ async function loadRules() {
     else resetRuleForm();
   } else {
     updateRuleFormUI();
+    renderRuleConditionsPanel();
   }
   bindRuleRowClicks();
 }

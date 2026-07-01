@@ -50,6 +50,7 @@ export class FonioRequestsService {
       petsRequested: dto.requestType === RequestType.ADD_PET,
       listingCapacity: reservation.listing.personCapacity,
       listingAllowsPets: reservation.listing.petsAllowed,
+      requestDetails: dto.details,
     });
 
     const status =

@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { FonioModule } from '../fonio/fonio.module';
 import { HostawayModule } from '../hostaway/hostaway.module';
+import { RulesModule } from '../rules/rules.module';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminController } from './admin.controller';
@@ -13,6 +14,7 @@ import { JwtStrategy } from './jwt.strategy';
   imports: [
     FonioModule,
     HostawayModule,
+    RulesModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
