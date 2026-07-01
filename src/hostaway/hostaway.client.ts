@@ -9,6 +9,7 @@ import {
   HostawayReservation,
   HostawaySingleResponse,
   HostawayTokenResponse,
+  HostawayUnifiedWebhook,
 } from './hostaway.types';
 
 @Injectable()
@@ -194,5 +195,30 @@ export class HostawayClient {
       communicationType,
     });
     return data.result.id;
+  }
+
+  async listUnifiedWebhooks(): Promise<HostawayUnifiedWebhook[]> {
+    const { data } = await this.http.get<
+      HostawayListResponse<HostawayUnifiedWebhook>
+    >('/webhooks/unifiedWebhooks');
+    return data.result ?? [];
+  }
+
+  async createUnifiedWebhook(params: {
+    url: string;
+    login?: string;
+    password?: string;
+    alertingEmailAddress?: string;
+  }): Promise<HostawayUnifiedWebhook> {
+    const { data } = await this.http.post<
+      HostawaySingleResponse<HostawayUnifiedWebhook>
+    >('/webhooks/unifiedWebhooks', {
+      isEnabled: 1,
+      url: params.url,
+      login: params.login ?? null,
+      password: params.password ?? null,
+      alertingEmailAddress: params.alertingEmailAddress ?? null,
+    });
+    return data.result;
   }
 }

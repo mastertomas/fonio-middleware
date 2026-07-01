@@ -90,6 +90,24 @@ curl -X POST https://vermietung.brainions.digital/api/v1/admin/sync \
 
 ## 5. Hostaway webhooks
 
+### Option A — Admin API (no Hostaway dashboard login)
+
+After deploy and admin login:
+
+```bash
+# List existing webhooks in Hostaway
+curl https://vermietung.brainions.digital/api/v1/admin/sync/hostaway-webhooks \
+  -H "Authorization: Bearer YOUR_JWT"
+
+# Register production webhook (uses PRODUCTION_URL + HOSTAWAY_WEBHOOK_* from .env)
+curl -X POST https://vermietung.brainions.digital/api/v1/admin/sync/register-webhook \
+  -H "Authorization: Bearer YOUR_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+### Option B — Hostaway dashboard
+
 In Hostaway → Settings → Webhooks, add:
 
 | Field | Value |

@@ -72,3 +72,12 @@ export interface HostawayConversationMessage {
   insertedOn?: string;
   isIncoming?: number;
 }
+
+export interface HostawayUnifiedWebhook {
+  id: number;
+  isEnabled: number;
+  url: string;
+  login: string | null;
+  password: string | null;
+  alertingEmailAddress: string | null;
+}

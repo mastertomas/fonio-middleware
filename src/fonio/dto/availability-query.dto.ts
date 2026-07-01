@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsInt,
@@ -6,6 +6,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
+import { parseQueryBoolean } from '../../common/utils/query-boolean.util';
 
 export class AvailabilityQueryDto {
   @IsOptional()
@@ -28,7 +29,7 @@ export class AvailabilityQueryDto {
   guests!: number;
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => parseQueryBoolean(value))
   @IsBoolean()
   pets?: boolean;
 
@@ -41,4 +42,9 @@ export class AvailabilityQueryDto {
   @IsOptional()
   @IsString()
   roomType?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => parseQueryBoolean(value))
+  @IsBoolean()
+  availableOnly?: boolean;
 }

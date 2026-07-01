@@ -70,3 +70,35 @@ After inbound webhook, fonio receives:
 Swagger → `GET /api/v1/admin/logs` (after admin login)
 
 Shows `call_context`, `availability_search`, `guest_verify` events without storing PII.
+
+## Test availability (local or production)
+
+### Option A — npm script (recommended)
+
+```bash
+# API must be running; uses FONIO_API_KEY and APP_URL from .env
+npm run test:availability
+
+# Custom search
+npm run test:availability -- --city=Stuttgart --checkIn=2026-08-01 --checkOut=2026-08-05 --guests=4 --pets=true
+```
+
+### Option B — Swagger
+
+1. Open http://localhost:3000/docs (or production `/docs`)
+2. Section **fonio** → `GET /api/v1/fonio/availability`
+3. Click **Authorize** → enter `FONIO_API_KEY` as `x-api-key`
+4. Fill `city`, `checkIn`, `checkOut`, `guests` → Execute
+
+### Option C — curl
+
+```bash
+curl "http://localhost:3000/api/v1/fonio/availability?city=Stuttgart&checkIn=2026-07-10&checkOut=2026-07-15&guests=2&availableOnly=true" \
+  -H "x-api-key: YOUR_FONIO_API_KEY"
+```
+
+**Before testing:** run **Hostaway Sync** in admin so listings and calendars exist in the database.
+
+### Production test
+
+Replace `localhost:3000` with `https://vermietung.brainions.digital` after deploy.

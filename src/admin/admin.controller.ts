@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import {
   paginated,
@@ -17,6 +18,7 @@ import {
 } from '../common/dto/pagination-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { FonioCallContextService } from '../fonio/fonio-call-context.service';
+import { HostawayClient } from '../hostaway/hostaway.client';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { SyncSettingsService } from '../hostaway/sync-settings.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -37,6 +39,8 @@ export class AdminController {
     private readonly sync: HostawaySyncService,
     private readonly syncSettings: SyncSettingsService,
     private readonly fonioSetup: FonioCallContextService,
+    private readonly hostaway: HostawayClient,
+    private readonly config: ConfigService,
   ) {}
 
   @Get('listings')
@@ -156,6 +160,55 @@ export class AdminController {
       console.error(`Background sync failed: ${message}`);
     });
     return { started: true, message: 'Sync started in background' };
+  }
+
+  @Get('sync/hostaway-webhooks')
+  @ApiOperation({ summary: 'List unified webhooks registered in Hostaway (via Public API)' })
+  listHostawayWebhooks() {
+    return this.hostaway.listUnifiedWebhooks();
+  }
+
+  @Post('sync/register-webhook')
+  @ApiOperation({
+    summary: 'Register production webhook URL in Hostaway via Public API (no dashboard login)',
+  })
+  async registerHostawayWebhook(@Body() body?: { url?: string; alertingEmail?: string }) {
+    const base = (
+      this.config.get<string>('PRODUCTION_URL') ??
+      this.config.get<string>('APP_URL') ??
+      'https://vermietung.brainions.digital'
+    ).replace(/\/$/, '');
+    const url = body?.url ?? `${base}/webhooks/hostaway`;
+    const login = this.config.get<string>('HOSTAWAY_WEBHOOK_USERNAME');
+    const password = this.config.get<string>('HOSTAWAY_WEBHOOK_PASSWORD');
+    const alertingEmail =
+      body?.alertingEmail ??
+      this.config.get<string>('ADMIN_EMAIL') ??
+      undefined;
+
+    const existing = await this.hostaway.listUnifiedWebhooks();
+    const match = existing.find((w) => w.url === url);
+    if (match) {
+      return {
+        created: false,
+        message: 'Webhook URL already registered in Hostaway',
+        webhook: match,
+        existing,
+      };
+    }
+
+    const webhook = await this.hostaway.createUnifiedWebhook({
+      url,
+      login: login || undefined,
+      password: password || undefined,
+      alertingEmailAddress: alertingEmail,
+    });
+
+    return {
+      created: true,
+      message: 'Webhook registered in Hostaway',
+      webhook,
+    };
   }
 
   @Get('rules')
