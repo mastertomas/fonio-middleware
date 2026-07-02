@@ -255,7 +255,35 @@
 
       <section id="tab-logs" class="tab hidden">
         <header class="page-header"><h2 data-i18n="logs.title">API audit log</h2></header>
-        <p class="field-hint" data-i18n="logs.hint">Technical API events (fonio calls, admin actions, webhooks). No guest names or phone numbers. Includes development tests until fonio goes live.</p>
+        <p class="field-hint" data-i18n="logs.hint">Technical API events (fonio calls, admin actions, webhooks). Sensitive fields are masked; IPs are hashed. Full call transcripts remain in fonio.</p>
+        <div class="card" id="log-settings-card">
+          <h3 data-i18n="logs.retentionTitle">Log retention (GDPR)</h3>
+          <p class="field-hint" data-i18n="logs.retentionHint">Automatic deletion of expired log entries. PII-related metadata uses the shorter retention period.</p>
+          <form id="log-settings-form" class="log-settings-form">
+            <label>
+              <span data-i18n="logs.debugDays">Debug logs (days)</span>
+              <input type="number" id="log-debug-days" min="7" max="14" value="14" />
+              <span class="field-hint" data-i18n="logs.debugDaysHint">7–14 days</span>
+            </label>
+            <label>
+              <span data-i18n="logs.operationalDays">Operational / security (days)</span>
+              <input type="number" id="log-operational-days" min="1" max="90" value="30" />
+            </label>
+            <label>
+              <span data-i18n="logs.piiDays">PII metadata max (days)</span>
+              <input type="number" id="log-pii-days" min="1" max="30" value="30" />
+            </label>
+            <label>
+              <span data-i18n="logs.maxDays">Maximum cap (days)</span>
+              <input type="number" id="log-max-days" min="30" max="90" value="90" />
+              <span class="field-hint" data-i18n="logs.maxDaysHint">30–90 days</span>
+            </label>
+            <div class="form-actions" style="grid-column: 1 / -1;">
+              <button type="submit" class="btn primary" data-i18n="logs.retentionSave">Save retention settings</button>
+            </div>
+          </form>
+          <p id="log-settings-readonly-hint" class="field-hint hidden" data-i18n="logs.retentionReadonly">Only EDITOR or ADMIN can change log retention.</p>
+        </div>
         <div id="logs-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="logs-table"></div>
         <div id="logs-info" class="table-info"></div>

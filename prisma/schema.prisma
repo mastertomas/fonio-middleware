@@ -244,3 +244,12 @@ model SyncSettings {
   lastAutoSyncAt  DateTime?
   updatedAt       DateTime  @updatedAt
 }
+
+model LogSettings {
+  id                       String   @id @default("default")
+  debugRetentionDays       Int      @default(14)
+  operationalRetentionDays Int      @default(30)
+  piiRetentionDays         Int      @default(30)
+  maxRetentionDays         Int      @default(90)
+  updatedAt                DateTime @updatedAt
+}

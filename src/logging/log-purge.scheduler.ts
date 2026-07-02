@@ -10,7 +10,7 @@ export class LogPurgeScheduler {
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async purgeExpiredLogs() {
-    await this.audit.purgeExpired();
-    this.logger.log('Purged expired API audit logs');
+    const count = await this.audit.purgeExpired();
+    this.logger.log(`Purged ${count} expired API audit log(s)`);
   }
 }

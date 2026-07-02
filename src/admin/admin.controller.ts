@@ -33,6 +33,7 @@ import { HostawayConversationService } from '../hostaway/hostaway-conversation.s
 import { GuestRequestInboxService } from '../hostaway/guest-request-inbox.service';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { SyncSettingsService } from '../hostaway/sync-settings.service';
+import { LogSettingsService } from '../logging/log-settings.service';
 import { getConditionFieldSchema } from '../rules/approval-conditions';
 import { RulesService } from '../rules/rules.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -42,6 +43,7 @@ import {
   UpdateVerificationConfigDto,
 } from './dto/admin-rules.dto';
 import { UpdateSyncSettingsDto } from './dto/sync-settings.dto';
+import { UpdateLogSettingsDto } from './dto/log-settings.dto';
 import { AdminAuditInterceptor } from '../logging/admin-audit.interceptor';
 
 @ApiTags('admin')
@@ -61,6 +63,7 @@ export class AdminController {
     private readonly rules: RulesService,
     private readonly conversations: HostawayConversationService,
     private readonly guestInbox: GuestRequestInboxService,
+    private readonly logSettings: LogSettingsService,
   ) {}
 
   @Get('listings')
@@ -441,6 +444,19 @@ export class AdminController {
     const linked = await this.conversations.backfillMissing();
     const retries = await this.guestInbox.retryPendingForwards();
     return { ...linked, inboxRetries: retries };
+  }
+
+  @Get('log-settings')
+  @ApiOperation({ summary: 'GDPR log retention settings' })
+  getLogSettings() {
+    return this.logSettings.getOrCreate();
+  }
+
+  @Patch('log-settings')
+  @Roles(AdminRole.EDITOR, AdminRole.ADMIN)
+  @ApiOperation({ summary: 'Update GDPR log retention settings' })
+  updateLogSettings(@Body() dto: UpdateLogSettingsDto) {
+    return this.logSettings.update(dto);
   }
 
   @Get('logs')

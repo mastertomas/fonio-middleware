@@ -103,6 +103,10 @@ function applyRoleUi() {
     el.toggleAttribute('disabled', readOnly);
   });
   $('#sync-settings-readonly-hint')?.classList.toggle('hidden', canEdit());
+  $('#log-settings-form')?.querySelectorAll('input, button').forEach((el) => {
+    el.toggleAttribute('disabled', readOnly);
+  });
+  $('#log-settings-readonly-hint')?.classList.toggle('hidden', canEdit());
   updateAdminSession();
   $('#rule-form')?.querySelectorAll('input, select, button').forEach((el) => {
     if (el.id === 'rule-delete-btn') el.classList.toggle('hidden', !canAdmin() || !editingRuleId);
@@ -1260,7 +1264,39 @@ function truncateText(text, max = 100) {
   return `${s.slice(0, max - 1)}…`;
 }
 
+async function loadLogSettings() {
+  try {
+    const settings = await api('/log-settings');
+    $('#log-debug-days').value = settings.debugRetentionDays ?? 14;
+    $('#log-operational-days').value = settings.operationalRetentionDays ?? 30;
+    $('#log-pii-days').value = settings.piiRetentionDays ?? 30;
+    $('#log-max-days').value = settings.maxRetentionDays ?? 90;
+  } catch {
+    /* keep defaults */
+  }
+}
+
+$('#log-settings-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await api('/log-settings', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        debugRetentionDays: Number($('#log-debug-days').value),
+        operationalRetentionDays: Number($('#log-operational-days').value),
+        piiRetentionDays: Number($('#log-pii-days').value),
+        maxRetentionDays: Number($('#log-max-days').value),
+      }),
+    });
+    notify.success(t('logs.retentionSaved'));
+    loadLogSettings();
+  } catch (ex) {
+    notify.error(ex.message);
+  }
+});
+
 async function loadLogs() {
+  await loadLogSettings();
   const logs = await api('/logs');
   ensureTableToolbar('#logs-toolbar', 'logs', loadLogs);
   const data = paginateClient(logs, 'logs', (l) => [
@@ -1327,6 +1363,65 @@ function formatLogMetadata(metadata) {
   return JSON.stringify(metadata, null, 2);
 }
 
+function renderReadableFields(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return '';
+  const skip = new Set(['hintDe', 'guestScriptDe', 'verificationInstructionsDe']);
+  const rows = Object.entries(obj)
+    .filter(([k, v]) => !skip.has(k) && v !== null && v !== undefined && v !== '')
+    .slice(0, 12)
+    .map(([k, v]) => {
+      const val = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      return `<tr><th>${esc(k)}</th><td>${esc(truncateText(val, 200))}</td></tr>`;
+    });
+  if (!rows.length) return '';
+  return `<table class="meta-kv-table"><tbody>${rows.join('')}</tbody></table>`;
+}
+
+function renderRawJsonDetails(label, data) {
+  const json = typeof data === 'string' ? data : JSON.stringify(data ?? {}, null, 2);
+  return `<details class="modal-details-raw"><summary>${esc(label)}</summary><pre class="json-block">${esc(json)}</pre></details>`;
+}
+
+function renderModalMetadataSections(meta) {
+  const req = meta.requestReceived;
+  const res = meta.responseRecorded ?? meta;
+  const parts = [];
+
+  if (meta.middlewareAction) {
+    parts.push(`<p><strong>${t('fonioActivity.middlewareAction')}:</strong> ${esc(meta.middlewareAction)}</p>`);
+  }
+  if (meta.outcomeDetail) {
+    parts.push(`<p class="field-hint">${esc(meta.outcomeDetail)}</p>`);
+  }
+
+  const reqEmpty = !req || (typeof req === 'object' && Object.keys(req).length === 0);
+  parts.push(`<h5>${t('fonioActivity.requestSection')}</h5>`);
+  if (reqEmpty) {
+    parts.push(`<p class="field-hint">${t('logs.noRequestBody')}</p>`);
+  } else if (typeof req === 'string') {
+    parts.push(`<p>${esc(req)}</p>`);
+  } else {
+    parts.push(renderReadableFields(req));
+    parts.push(renderRawJsonDetails(t('logs.rawRequest'), req));
+  }
+
+  if (res?.hintDe) {
+    parts.push(`<h5>${t('logs.verificationRule')}</h5>`);
+    parts.push(`<p class="modal-highlight">${esc(res.hintDe)}</p>`);
+  } else if (res?.guestScriptDe) {
+    parts.push(`<h5>${t('verification.guestScript')}</h5>`);
+    parts.push(`<p class="modal-highlight">${esc(res.guestScriptDe)}</p>`);
+  }
+
+  parts.push(`<h5>${t('fonioActivity.responseSection')}</h5>`);
+  if (res && typeof res === 'object') {
+    parts.push(renderReadableFields(res));
+  }
+  parts.push(renderRawJsonDetails(t('logs.fullMetadata'), res));
+
+  return parts.join('');
+}
+
 function showLogDetail(log) {
   const meta = log.metadata ?? {};
   const modal = $('#log-detail-modal');
@@ -1334,11 +1429,9 @@ function showLogDetail(log) {
   $('#log-detail-modal-title').textContent =
     `${t('logs.detailTitle')} — ${log.source} / ${log.action}`;
   body.innerHTML = `
-    <p><strong>${t('logs.time')}:</strong> ${formatDateTime(log.createdAt)} · <strong>${t('logs.status')}:</strong> ${log.statusCode ?? '–'}</p>
+    <p><strong>${t('logs.time')}:</strong> ${formatDateTime(log.createdAt)} · <strong>${t('logs.status')}:</strong> ${log.statusCode ?? '–'}${meta.callId ? ` · <strong>${t('fonioActivity.callId')}:</strong> ${esc(meta.callId)}` : ''}</p>
     <p><strong>${t('logs.summary')}:</strong> ${esc(formatLogSummary(log))}</p>
-    ${meta.middlewareAction ? `<p><strong>${t('fonioActivity.middlewareAction')}:</strong> ${esc(meta.middlewareAction)}</p>` : ''}
-    <h5>${t('logs.fullMetadata')}</h5>
-    <pre class="json-block">${esc(formatLogMetadata(meta))}</pre>
+    ${renderModalMetadataSections(meta)}
   `;
   modal.classList.remove('hidden');
   document.body.classList.add('modal-open');
@@ -1469,6 +1562,8 @@ function formatLegacyFonioRequest(action, meta) {
       return `${meta.city ?? '–'} ${meta.checkIn ?? ''}→${meta.checkOut ?? ''} guests=${meta.guests ?? '–'}`;
     case 'guest_verify':
       return `${meta.arrivalDate ?? ''}→${meta.departureDate ?? ''}${meta.hadReservationId ? ' +reservationId' : ''}`;
+    case 'verify_requirements':
+      return t('logs.getNoBody');
     default:
       return '–';
   }
@@ -1499,13 +1594,7 @@ function showFonioActivityDetail(log) {
     `${t('fonioActivity.modalTitle')} — ${log.action}`;
   body.innerHTML = `
     <p><strong>${t('logs.time')}:</strong> ${formatDateTime(log.createdAt)} · <strong>${t('logs.status')}:</strong> ${log.statusCode ?? '–'} · <strong>${t('fonioActivity.callId')}:</strong> ${esc(meta.callId ?? '–')}</p>
-    <h5>${t('fonioActivity.requestSection')}</h5>
-    <pre class="json-block">${esc(JSON.stringify(meta.requestReceived ?? formatLegacyFonioRequest(log.action, meta), null, 2))}</pre>
-    <h5>${t('fonioActivity.actionSection')}</h5>
-    <p>${esc(meta.middlewareAction ?? '–')}</p>
-    ${meta.outcomeDetail ? `<p class="field-hint">${esc(meta.outcomeDetail)}</p>` : ''}
-    <h5>${t('fonioActivity.responseSection')}</h5>
-    <pre class="json-block">${esc(JSON.stringify(meta.responseRecorded ?? meta, null, 2))}</pre>
+    ${renderModalMetadataSections(meta)}
   `;
   modal.classList.remove('hidden');
   document.body.classList.add('modal-open');
