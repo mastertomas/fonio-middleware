@@ -455,10 +455,27 @@ export class AdminController {
 
   @Get('fonio-activity')
   @ApiOperation({ summary: 'Recent fonio call activity with metadata for troubleshooting' })
-  listFonioActivity() {
+  listFonioActivity(
+    @Query('action') action?: string,
+    @Query('callId') callId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const take = Math.min(Math.max(Number(limit) || 200, 1), 500);
+    const callIdTerm = callId?.trim();
     return this.prisma.apiLog.findMany({
-      where: { source: 'fonio' },
-      take: 100,
+      where: {
+        source: 'fonio',
+        ...(action?.trim() ? { action: action.trim() } : {}),
+        ...(callIdTerm
+          ? {
+              metadata: {
+                path: ['callId'],
+                equals: callIdTerm,
+              },
+            }
+          : {}),
+      },
+      take,
       orderBy: { createdAt: 'desc' },
     });
   }

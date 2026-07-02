@@ -463,10 +463,48 @@ th.sortable:hover {
 }
 
 .metadata-cell {
-  max-width: 28rem;
+  max-width: 22rem;
   font-size: 0.8rem;
   color: var(--muted);
   word-break: break-word;
+}
+
+.json-block {
+  background: var(--surface-2, #f6f7f9);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.78rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 16rem;
+}
+
+.fonio-activity-detail h5 {
+  margin: 1rem 0 0.35rem;
+  font-size: 0.85rem;
+}
+
+.badge.ok {
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.badge.warn {
+  background: #fff3e0;
+  color: #e65100;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.btn-sm {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
 }
 
 .url-row {

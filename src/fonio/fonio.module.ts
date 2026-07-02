@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { HostawayModule } from '../hostaway/hostaway.module';
 import { RulesModule } from '../rules/rules.module';
+import { FonioActivityService } from './fonio-activity.service';
 import { FonioAvailabilityService } from './fonio-availability.service';
 import { FonioBookingOfferService } from './fonio-booking-offer.service';
 import { FonioCallContextService } from './fonio-call-context.service';
@@ -32,6 +33,7 @@ import { FonioVerificationService } from './fonio-verification.service';
     FonioVerificationService,
     FonioRequestsService,
     FonioBookingOfferService,
+    FonioActivityService,
   ],
   exports: [FonioCallContextService, FonioVerificationService],
 })

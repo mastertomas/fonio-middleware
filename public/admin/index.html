@@ -258,7 +258,7 @@
 
       <section id="tab-fonioActivity" class="tab hidden">
         <header class="page-header"><h2 data-i18n="fonioActivity.title">fonio call activity</h2></header>
-        <p class="field-hint" data-i18n="fonioActivity.hint">Shows what fonio sent, what the middleware recorded, and the action taken. No raw phone numbers or emails.</p>
+        <p class="field-hint" data-i18n="fonioActivity.hint">Each row is one fonio API call to the middleware. Shows sanitized request data, what the middleware did, and the outcome. Phone numbers and emails are masked. Full call transcripts remain in fonio — only tool requests are logged here.</p>
         <div id="fonio-activity-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="fonio-activity-table"></div>
         <div id="fonio-activity-info" class="table-info"></div>
@@ -316,6 +316,16 @@
         <div id="users-pagination" class="table-pagination"></div>
       </section>
     </main>
+  </div>
+
+  <div id="fonio-activity-modal" class="modal-overlay hidden">
+    <div class="modal-card modal-wide">
+      <h4 id="fonio-activity-modal-title" data-i18n="fonioActivity.modalTitle">fonio request detail</h4>
+      <div id="fonio-activity-modal-body" class="fonio-activity-detail"></div>
+      <div class="modal-actions">
+        <button type="button" id="fonio-activity-modal-close" class="btn ghost" data-i18n="common.close">Close</button>
+      </div>
+    </div>
   </div>
 
   <div id="conversation-modal" class="modal-overlay hidden">
