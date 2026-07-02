@@ -164,13 +164,19 @@
           </form>
           <div id="verification-prompt-preview" class="verification-prompt-preview hidden">
             <h4 data-i18n="verification.promptPreview">fonio prompt preview (from current admin settings)</h4>
-            <p class="field-hint" data-i18n="verification.promptPreviewHint">Paste {{verification_instructions_de}} into fonio „Eigene Anweisungen“, or use the guest script variable in the system prompt.</p>
-            <label><span data-i18n="verification.guestScript">What to say to the guest</span>
-              <textarea id="verification-guest-script" rows="3" readonly></textarea>
-            </label>
-            <label><span data-i18n="verification.fullInstructions">Full verification block for fonio</span>
-              <textarea id="verification-instructions-block" rows="8" readonly></textarea>
-            </label>
+            <p class="field-hint" data-i18n="verification.promptPreviewHint">Use webhook variable {{verification_instructions_de}} in fonio — it updates automatically when you save here.</p>
+            <div class="prompt-preview-field">
+              <span class="field-label" data-i18n="verification.guestScript">What to say to the guest ({{verification_guest_script_de}})</span>
+              <div class="prompt-oneline-row">
+                <input type="text" id="verification-guest-script" class="prompt-oneline" readonly />
+                <button type="button" class="btn copy btn-sm" id="verification-copy-script" data-i18n="common.copy">Copy</button>
+              </div>
+            </div>
+            <details class="prompt-preview-details">
+              <summary data-i18n="verification.fullInstructions">Full verification block ({{verification_instructions_de}})</summary>
+              <textarea id="verification-instructions-block" rows="10" readonly></textarea>
+              <button type="button" class="btn copy btn-sm" id="verification-copy-block" data-i18n="common.copy">Copy</button>
+            </details>
           </div>
         </div>
 
@@ -324,6 +330,16 @@
       <div id="fonio-activity-modal-body" class="fonio-activity-detail"></div>
       <div class="modal-actions">
         <button type="button" id="fonio-activity-modal-close" class="btn ghost" data-i18n="common.close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="log-detail-modal" class="modal-overlay hidden">
+    <div class="modal-card modal-wide">
+      <h4 id="log-detail-modal-title" data-i18n="logs.detailTitle">Log detail</h4>
+      <div id="log-detail-modal-body" class="fonio-activity-detail"></div>
+      <div class="modal-actions">
+        <button type="button" id="log-detail-modal-close" class="btn ghost" data-i18n="common.close">Close</button>
       </div>
     </div>
   </div>

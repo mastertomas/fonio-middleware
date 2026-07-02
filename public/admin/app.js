@@ -1096,6 +1096,16 @@ function renderVerificationPromptPreview(prompt) {
   box.classList.remove('hidden');
   script.value = prompt.guestScriptDe;
   block.value = prompt.verificationInstructionsDe ?? '';
+  $('#verification-copy-script')?.replaceWith($('#verification-copy-script').cloneNode(true));
+  $('#verification-copy-block')?.replaceWith($('#verification-copy-block').cloneNode(true));
+  $('#verification-copy-script')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(script.value);
+    notify.success(t('common.copied'));
+  });
+  $('#verification-copy-block')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(block.value);
+    notify.success(t('common.copied'));
+  });
 }
 
 function getVerificationFormData() {
@@ -1244,6 +1254,12 @@ $('#inbox-backfill-btn')?.addEventListener('click', async () => {
   }
 });
 
+function truncateText(text, max = 100) {
+  const s = String(text ?? '');
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1)}…`;
+}
+
 async function loadLogs() {
   const logs = await api('/logs');
   ensureTableToolbar('#logs-toolbar', 'logs', loadLogs);
@@ -1252,15 +1268,16 @@ async function loadLogs() {
     l.source,
     l.action,
     l.statusCode,
-    JSON.stringify(l.metadata ?? {}),
+    formatLogSummary(l),
   ].join(' '));
-  const rows = data.items.map((l) => `
+  const rows = data.items.map((l, idx) => `
     <tr>
       <td>${formatDateTime(l.createdAt)}</td>
       <td>${l.source}</td>
-      <td>${l.action}</td>
+      <td><code>${esc(l.action)}</code></td>
       <td>${l.statusCode || '–'}</td>
-      <td class="metadata-cell">${esc(formatLogMetadata(l.metadata))}</td>
+      <td class="metadata-cell oneline" title="${esc(formatLogSummary(l))}">${esc(formatLogSummary(l))}</td>
+      <td><button type="button" class="btn ghost btn-sm" data-log-detail="${idx}">${t('logs.viewDetails')}</button></td>
     </tr>
   `).join('');
   $('#logs-table').innerHTML = `
@@ -1270,18 +1287,73 @@ async function loadLogs() {
       ${sortTh('logs', 'action', t('logs.action'))}
       <th>${t('logs.status')}</th>
       <th>${t('logs.details')}</th>
+      <th></th>
     </tr></thead><tbody>${rows}</tbody></table>`;
   bindSortableHeaders('#logs-table', 'logs', loadLogs);
   renderTableInfo('#logs-info', data, data.maxTotal);
   renderPagination('#logs-pagination', data, 'logs', loadLogs);
+  data.items.forEach((log, idx) => {
+    $(`[data-log-detail="${idx}"]`)?.addEventListener('click', () => showLogDetail(log));
+  });
+}
+
+function formatLogSummary(log) {
+  const meta = log.metadata ?? {};
+  if (typeof meta.middlewareAction === 'string' && meta.middlewareAction) {
+    return truncateText(meta.middlewareAction, 100);
+  }
+  if (meta.outcomeDetail) {
+    return truncateText(`${meta.outcome ?? 'result'}: ${meta.outcomeDetail}`, 100);
+  }
+  if (meta.event) return truncateText(meta.event, 100);
+  if (meta.path) return truncateText(`${log.method ?? ''} ${meta.path}`.trim(), 100);
+  if (meta.role) return truncateText(`${meta.role}${meta.adminId ? ` · ${meta.adminId.slice(0, 8)}…` : ''}`, 100);
+  const parts = [];
+  if (meta.verified === true) parts.push('verified');
+  if (meta.verified === false) parts.push(`failed: ${meta.message ?? '?'}`);
+  if (meta.reservationId) parts.push(`res#${meta.reservationId}`);
+  if (meta.city) parts.push(meta.city);
+  if (meta.availableCount !== undefined) parts.push(`${meta.availableCount} available`);
+  if (meta.requestType) parts.push(meta.requestType);
+  if (meta.status) parts.push(meta.status);
+  if (parts.length) return truncateText(parts.join(' · '), 100);
+  const keys = Object.keys(meta);
+  if (!keys.length) return '–';
+  return truncateText(keys.slice(0, 4).map((k) => `${k}=…`).join(' · '), 100);
 }
 
 function formatLogMetadata(metadata) {
   if (!metadata || typeof metadata !== 'object') return '–';
-  return Object.entries(metadata)
-    .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`)
-    .join(' · ');
+  return JSON.stringify(metadata, null, 2);
 }
+
+function showLogDetail(log) {
+  const meta = log.metadata ?? {};
+  const modal = $('#log-detail-modal');
+  const body = $('#log-detail-modal-body');
+  $('#log-detail-modal-title').textContent =
+    `${t('logs.detailTitle')} — ${log.source} / ${log.action}`;
+  body.innerHTML = `
+    <p><strong>${t('logs.time')}:</strong> ${formatDateTime(log.createdAt)} · <strong>${t('logs.status')}:</strong> ${log.statusCode ?? '–'}</p>
+    <p><strong>${t('logs.summary')}:</strong> ${esc(formatLogSummary(log))}</p>
+    ${meta.middlewareAction ? `<p><strong>${t('fonioActivity.middlewareAction')}:</strong> ${esc(meta.middlewareAction)}</p>` : ''}
+    <h5>${t('logs.fullMetadata')}</h5>
+    <pre class="json-block">${esc(formatLogMetadata(meta))}</pre>
+  `;
+  modal.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+}
+
+$('#log-detail-modal-close')?.addEventListener('click', () => {
+  $('#log-detail-modal').classList.add('hidden');
+  document.body.classList.remove('modal-open');
+});
+$('#log-detail-modal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'log-detail-modal') {
+    $('#log-detail-modal').classList.add('hidden');
+    document.body.classList.remove('modal-open');
+  }
+});
 
 async function loadFonioActivity() {
   const state = tableState.fonioActivity;
@@ -1306,7 +1378,7 @@ async function loadFonioActivity() {
     const meta = l.metadata ?? {};
     const summary = formatFonioActionSummary(l.action, meta);
     const requestText = formatFonioRequestSummary(meta.requestReceived, l.action, meta);
-    const actionText = meta.middlewareAction ?? '–';
+    const actionText = truncateText(meta.middlewareAction ?? '–', 80);
     const outcome = formatFonioOutcome(meta);
     return `
     <tr>
@@ -1314,8 +1386,8 @@ async function loadFonioActivity() {
       <td><code>${esc(l.action)}</code></td>
       <td>${l.statusCode || '–'}</td>
       <td>${esc(meta.callId ?? '–')}</td>
-      <td class="metadata-cell">${esc(requestText)}</td>
-      <td class="metadata-cell">${esc(actionText)}</td>
+      <td class="metadata-cell oneline" title="${esc(requestText)}">${esc(requestText)}</td>
+      <td class="metadata-cell oneline" title="${esc(actionText)}">${esc(actionText)}</td>
       <td>${outcome}</td>
       <td>${summary}</td>
       <td><button type="button" class="btn ghost btn-sm" data-fonio-detail="${idx}">${t('fonioActivity.viewDetails')}</button></td>
@@ -1387,8 +1459,8 @@ function formatFonioRequestSummary(requestReceived, action, meta) {
   if (req.listingId) parts.push(`listingId=${req.listingId}`);
   if (req.callerNumber || req.phone) parts.push('phone=[masked]');
   if (req.email || req.guestEmail) parts.push('email=[masked]');
-  if (parts.length > 0) return parts.join(' · ');
-  return JSON.stringify(req).slice(0, 120);
+  if (parts.length > 0) return truncateText(parts.join(' · '), 80);
+  return truncateText(JSON.stringify(req), 80);
 }
 
 function formatLegacyFonioRequest(action, meta) {

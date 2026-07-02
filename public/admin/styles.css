@@ -228,7 +228,7 @@ label {
   margin-bottom: 0.35rem;
 }
 
-input, select {
+input, select, textarea {
   width: 100%;
   padding: 0.6rem 0.75rem;
   border-radius: 8px;
@@ -236,6 +236,7 @@ input, select {
   background: var(--surface2);
   color: var(--text);
   margin-bottom: 1rem;
+  box-sizing: border-box;
 }
 
 .btn {
@@ -467,6 +468,78 @@ th.sortable:hover {
   font-size: 0.8rem;
   color: var(--muted);
   word-break: break-word;
+}
+
+.metadata-cell.oneline {
+  max-width: 28rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: normal;
+}
+
+.verification-prompt-preview {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.verification-prompt-preview h4 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.prompt-preview-field {
+  margin-bottom: 1rem;
+}
+
+.prompt-preview-field .field-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.prompt-oneline-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.prompt-oneline-row .prompt-oneline {
+  flex: 1;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.prompt-oneline-row .btn {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.prompt-preview-details {
+  margin-top: 0.5rem;
+}
+
+.prompt-preview-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  color: var(--text);
+}
+
+.prompt-preview-details textarea {
+  margin-bottom: 0.5rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 8rem;
+}
+
+.prompt-preview-details .btn {
+  margin-bottom: 0;
 }
 
 .json-block {
