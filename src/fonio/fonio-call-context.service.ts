@@ -3,15 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import { phoneHashVariants } from '../common/utils/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { FonioCallContextDto } from './dto/call-context.dto';
+import { FonioVerificationService } from './fonio-verification.service';
 
 @Injectable()
 export class FonioCallContextService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly verification: FonioVerificationService,
   ) {}
 
   async buildContext(dto: FonioCallContextDto) {
+    const requirements = await this.verification.getRequirements();
     const base = {
       verified: false,
       caller_phone: dto.callerNumber ?? null,
@@ -24,6 +27,9 @@ export class FonioCallContextService {
       greeting_hint:
         'Guten Tag, Sie erreichen brainions Vermietung. Wie kann ich Ihnen helfen?',
       hint_requires_verification: true,
+      verification_hint_de: requirements.hintDe,
+      verification_min_match_count: requirements.minMatchCount,
+      booking_offer_enabled: requirements.bookingOfferEnabled,
     };
 
     if (!dto.callerNumber) {
@@ -78,7 +84,17 @@ export class FonioCallContextService {
         'Use x-api-key header with your fonio API key on all fonio endpoints.',
         'call-context is the inbound webhook when a call starts.',
         'guest/verify is required before sharing full booking details.',
+        'GET guest/verify/requirements returns live minMatchCount and hintDe — do not hardcode counts in fonio tools.',
+        'booking-offer can be disabled in Admin → Rules & verification.',
       ],
+    };
+  }
+
+  async getSetupDetails() {
+    const requirements = await this.verification.getRequirements();
+    return {
+      ...this.getSetupUrls(),
+      verification: requirements,
     };
   }
 
@@ -88,8 +104,10 @@ export class FonioCallContextService {
       call_context_webhook: `${base}/api/v1/fonio/call-context`,
       availability: `${base}/api/v1/fonio/availability`,
       guest_verify: `${base}/api/v1/fonio/guest/verify`,
+      guest_verify_requirements: `${base}/api/v1/fonio/guest/verify/requirements`,
       guest_reservation: `${base}/api/v1/fonio/guest/reservation`,
       guest_requests: `${base}/api/v1/fonio/guest/requests`,
+      booking_offer: `${base}/api/v1/fonio/booking-offer`,
       hostaway_webhook: `${base}/webhooks/hostaway`,
       swagger_docs: `${base}/docs`,
     };

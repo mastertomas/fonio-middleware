@@ -77,4 +77,8 @@ export class UpdateVerificationConfigDto {
   @Min(1)
   @Max(6)
   minMatchCount?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  bookingOfferEnabled?: boolean;
 }

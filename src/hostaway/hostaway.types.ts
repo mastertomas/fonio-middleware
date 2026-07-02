@@ -81,3 +81,32 @@ export interface HostawayUnifiedWebhook {
   password: string | null;
   alertingEmailAddress: string | null;
 }
+
+export interface HostawayPriceComponent {
+  listingFeeSettingId?: number | null;
+  type: string;
+  name: string;
+  title: string;
+  alias?: string | null;
+  quantity?: number | null;
+  value: number;
+  total: number;
+  isIncludedInTotalPrice: number;
+  isOverriddenByUser?: number;
+  isMandatory?: number | null;
+  isDeleted?: number;
+}
+
+export interface HostawayPriceDetails {
+  totalPrice: number;
+  components: HostawayPriceComponent[];
+}
+
+export interface HostawayCreateReservationResult {
+  id: number;
+  listingMapId: number;
+  arrivalDate: string;
+  departureDate: string;
+  status: string;
+  totalPrice?: number;
+}

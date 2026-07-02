@@ -3,6 +3,15 @@
     "name": "x-api-key",
     "value": "YOUR_FONIO_API_KEY_FROM_ENV"
   },
+  "dynamicSettings": {
+    "note": "Do NOT hardcode minMatchCount in fonio tool descriptions. The live value comes from the API at runtime.",
+    "sources": [
+      "Inbound webhook call-context → verification_hint_de (includes current minMatchCount in German)",
+      "GET /api/v1/fonio/guest/verify/requirements → minMatchCount, hintDe, bookingOfferEnabled",
+      "POST guest/verify response → hint field (German, includes current minMatchCount)",
+      "GET /api/v1/fonio/setup → verification.minMatchCount"
+    ]
+  },
   "tools": [
     {
       "name": "Verfügbarkeit prüfen",
@@ -22,11 +31,20 @@
       "method": "POST",
       "urlPath": "/api/v1/fonio/guest/verify",
       "bodyExample": {
-        "reservationId": 62144308,
-        "phone": "+491234567890",
-        "arrivalDate": "2026-07-06",
-        "departureDate": "2026-07-16"
+        "arrivalDate": "2026-08-08",
+        "departureDate": "2026-08-10",
+        "listingName": "Wiesenblick",
+        "phone": "+4915150601701"
       },
+      "notes": [
+        "IMMER Anreise + Abreise mitschicken",
+        "Zusätzlich mindestens N übereinstimmende Felder — N = minMatchCount aus API (Admin → Minimum matching fields), NICHT fest im Tool-Text",
+        "N bezieht sich auf: listingName, phone, email, reservationId (stayDates zählt separat mit)",
+        "Der Gast muss NICHT alle Felder nennen — nur genug zur Bestätigung",
+        "reservationId ist optional",
+        "Bei Fehlschlag: hint aus API-Antwort vorlesen / danach fragen",
+        "Daten auch als DD.MM.YYYY möglich (z. B. 08.08.2026)"
+      ],
       "whenToUse": "PFLICHT vor Buchungsdetails, Buchung abrufen oder Gästeanfrage — auch wenn Anrufer erkannt wurde"
     },
     {
@@ -60,11 +78,39 @@
         "OTHER"
       ],
       "whenToUse": "Verifizierter Gast möchte Haustier, Extra-Gast, Storno, Check-in/out etc."
+    },
+    {
+      "name": "Buchungsanfrage erstellen",
+      "method": "POST",
+      "urlPath": "/api/v1/fonio/booking-offer",
+      "enabledWhen": "bookingOfferEnabled=true in GET /setup or /guest/verify/requirements",
+      "bodyExample": {
+        "listingId": 123456,
+        "checkIn": "2026-08-08",
+        "checkOut": "2026-08-10",
+        "guests": 2,
+        "guestFirstName": "Max",
+        "guestLastName": "Mustermann",
+        "guestEmail": "max@example.com",
+        "phone": "+491701234567",
+        "note": "Telefonische Anfrage über fonio"
+      },
+      "notes": [
+        "listingId aus Verfügbarkeitsantwort (listingId Feld)",
+        "Nur aufrufen wenn available=true für diese Unterkunft",
+        "Nur wenn bookingOfferEnabled in Admin aktiviert",
+        "Keine Preise am Telefon nennen — Team sendet Angebot aus Hostaway"
+      ],
+      "whenToUse": "Gast möchte buchen und gewünschte Unterkunft ist verfügbar"
     }
   ],
   "inboundWebhook": {
     "method": "POST",
     "urlPath": "/api/v1/fonio/call-context",
-    "note": "fonio sendet callerNumber automatisch"
+    "responseFields": {
+      "verification_hint_de": "German hint with live minMatchCount — use in system prompt as {{verification_hint_de}}",
+      "caller_recognized": "boolean",
+      "has_upcoming_booking": "boolean"
+    }
   }
 }

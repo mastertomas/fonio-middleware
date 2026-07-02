@@ -388,6 +388,9 @@ export class AdminController {
       data: {
         requiredFields: uniqueFields,
         minMatchCount: minMatch,
+        ...(dto.bookingOfferEnabled !== undefined
+          ? { bookingOfferEnabled: dto.bookingOfferEnabled }
+          : {}),
       },
     });
   }

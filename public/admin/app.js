@@ -1062,6 +1062,8 @@ function renderVerificationForm(config, fieldMeta) {
   $('#verification-config-id').value = config?.id ?? '';
   $('#verification-min-match').value = config?.minMatchCount ?? 3;
   $('#verification-min-match').max = VERIFICATION_FIELDS.length;
+  const offerCb = $('#verification-booking-offer');
+  if (offerCb) offerCb.checked = config?.bookingOfferEnabled !== false;
 
   container.innerHTML = VERIFICATION_FIELDS.map((field) => {
     const locked = field === 'stayDates';
@@ -1089,6 +1091,7 @@ function getVerificationFormData() {
   return {
     requiredFields: [...new Set(fields)],
     minMatchCount: Math.min(minMatch, fields.length),
+    bookingOfferEnabled: $('#verification-booking-offer')?.checked ?? true,
   };
 }
 

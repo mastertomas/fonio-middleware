@@ -147,9 +147,16 @@
               <div id="verification-field-checkboxes" class="checkbox-grid"></div>
             </fieldset>
             <label class="verification-min-match">
-              <span data-i18n="verification.minMatches">Minimum fields that must match</span>
+              <span data-i18n="verification.minMatches">Minimum matching fields</span>
               <input type="number" id="verification-min-match" min="1" max="6" value="3" />
-              <span class="field-hint" data-i18n="verification.minMatchesHint">Cannot exceed the number of selected fields. Reservation number is always required.</span>
+              <span class="field-hint" data-i18n="verification.minMatchesHint">Stay dates count as one field. Reservation number is optional.</span>
+            </label>
+            <label class="checkbox-row verification-booking-offer">
+              <input type="checkbox" id="verification-booking-offer" checked />
+              <span>
+                <strong data-i18n="verification.bookingOffer">Automatic booking offer (fonio)</strong>
+                <br><span class="field-hint" data-i18n="verification.bookingOfferHint">When dates are available, fonio can create a Hostaway inquiry via booking-offer API. No prices on the phone.</span>
+              </span>
             </label>
             <div class="form-actions">
               <button type="submit" class="btn primary" data-i18n="verification.save">Save verification settings</button>

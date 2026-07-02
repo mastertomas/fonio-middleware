@@ -4,8 +4,10 @@ import axios, { AxiosInstance } from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   HostawayCalendarDay,
+  HostawayCreateReservationResult,
   HostawayListResponse,
   HostawayListing,
+  HostawayPriceDetails,
   HostawayReservation,
   HostawaySingleResponse,
   HostawayTokenResponse,
@@ -219,6 +221,35 @@ export class HostawayClient {
       password: params.password ?? null,
       alertingEmailAddress: params.alertingEmailAddress ?? null,
     });
+    return data.result;
+  }
+
+  async calculatePriceDetails(
+    listingId: number,
+    params: {
+      startingDate: string;
+      endingDate: string;
+      numberOfGuests: number;
+    },
+  ): Promise<HostawayPriceDetails> {
+    const { data } = await this.http.post<
+      HostawaySingleResponse<HostawayPriceDetails>
+    >(`/listings/${listingId}/calendar/priceDetails`, {
+      startingDate: params.startingDate,
+      endingDate: params.endingDate,
+      numberOfGuests: params.numberOfGuests,
+      version: 2,
+    });
+    return data.result;
+  }
+
+  async createReservation(
+    payload: Record<string, unknown>,
+    forceOverbooking = false,
+  ): Promise<HostawayCreateReservationResult> {
+    const { data } = await this.http.post<
+      HostawaySingleResponse<HostawayCreateReservationResult>
+    >(`/reservations${forceOverbooking ? '?forceOverbooking=1' : ''}`, payload);
     return data.result;
   }
 }

@@ -9,7 +9,9 @@ import {
   hashValue,
   phonesMatch,
 } from '../common/utils/crypto.util';
+import { normalizeDateInput } from '../common/utils/date-input.util';
 import { HostawayClient } from '../hostaway/hostaway.client';
+import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GuestVerifyDto } from './dto/guest-verify.dto';
 import {
@@ -24,22 +26,57 @@ export interface VerifiedSessionPayload {
   listingHostawayId: number;
 }
 
+const FIELD_LABELS_DE: Record<VerificationField, string> = {
+  stayDates: 'Anreise- und Abreisedatum',
+  listingName: 'Name der Unterkunft',
+  phone: 'Telefonnummer',
+  email: 'E-Mail-Adresse',
+  reservationId: 'Reservierungsnummer',
+};
+
 @Injectable()
 export class FonioVerificationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly hostaway: HostawayClient,
+    private readonly sync: HostawaySyncService,
   ) {}
+
+  async getRequirements() {
+    const config = await this.prisma.verificationConfig.findFirst({
+      where: { isDefault: true },
+    });
+    const scoringFields = this.getScoringFields(config?.requiredFields);
+    const minMatch = Math.min(
+      config?.minMatchCount ?? 3,
+      scoringFields.length,
+    );
+    const optionalFields = scoringFields.filter((f) => f !== 'stayDates');
+
+    return {
+      alwaysRequired: ['stayDates'],
+      optionalFields,
+      minMatchCount: minMatch,
+      bookingOfferEnabled: config?.bookingOfferEnabled ?? true,
+      hintDe: this.buildHintDe(minMatch, optionalFields),
+      hintEn:
+        'Arrival and departure dates are always required. Additionally provide at least ' +
+        `${minMatch} matching details from: property name, phone, email, or reservation number. ` +
+        'The guest does not need to provide all of these — only enough to confirm the booking.',
+    };
+  }
 
   async verify(dto: GuestVerifyDto) {
     this.assertStayDatesProvided(dto);
+    const hint = (await this.getRequirements()).hintDe;
 
     const reservation = await this.findReservation(dto);
     if (!reservation) {
       throw new UnauthorizedException({
         verified: false,
         message: 'Reservation not found',
+        hint,
       });
     }
 
@@ -67,12 +104,15 @@ export class FonioVerificationService {
     }
 
     if (matches < minMatch) {
+      const missing = scoringFields.filter((f) => !checks.includes(f));
       throw new UnauthorizedException({
         verified: false,
         message: 'Guest verification failed',
         matchedFields: checks,
+        missingFields: missing,
         requiredMinMatches: minMatch,
         reservationId: resolved.hostawayId,
+        hint,
       });
     }
 
@@ -86,6 +126,7 @@ export class FonioVerificationService {
       verified: true,
       verificationToken: token,
       matchedFields: checks,
+      hint,
       reservation: {
         id: resolved.hostawayId,
         arrivalDate: resolved.arrivalDate.toISOString().slice(0, 10),
@@ -120,10 +161,14 @@ export class FonioVerificationService {
   async getSafeReservation(reservationHostawayId: number, token: string) {
     await this.assertVerified(token, reservationHostawayId);
 
-    const reservation = await this.prisma.reservation.findUnique({
+    let reservation = await this.prisma.reservation.findUnique({
       where: { hostawayId: reservationHostawayId },
       include: { listing: true },
     });
+
+    if (!reservation) {
+      reservation = await this.sync.syncSingleReservation(reservationHostawayId);
+    }
 
     if (!reservation) {
       throw new NotFoundException('Reservation not found');
@@ -155,31 +200,56 @@ export class FonioVerificationService {
       : [...VERIFICATION_FIELD_OPTIONS];
   }
 
+  private buildHintDe(
+    minMatch: number,
+    optionalFields: VerificationField[],
+  ): string {
+    const labels = optionalFields.map((f) => FIELD_LABELS_DE[f]);
+    return (
+      'Anreise- und Abreisedatum sind immer erforderlich. Zusätzlich mindestens ' +
+      `${minMatch} übereinstimmende Angabe(n) aus: ${labels.join(', ')}. ` +
+      'Der Gast muss nicht alles nennen — nur genug zur Bestätigung der Buchung.'
+    );
+  }
+
   private assertStayDatesProvided(dto: GuestVerifyDto) {
     if (!dto.arrivalDate?.trim() || !dto.departureDate?.trim()) {
       throw new UnauthorizedException({
         verified: false,
         message: 'Arrival and departure dates are required',
         missingFields: ['stayDates'],
+        hint: 'Bitte Anreise- und Abreisedatum erfragen (z. B. 08.08.2026 und 10.08.2026).',
       });
     }
   }
 
   private async findReservation(dto: GuestVerifyDto) {
     if (dto.reservationId) {
-      return this.prisma.reservation.findUnique({
+      let reservation = await this.prisma.reservation.findUnique({
         where: { hostawayId: dto.reservationId },
         include: { listing: true },
       });
+      if (!reservation) {
+        reservation = await this.sync.syncSingleReservation(dto.reservationId);
+      }
+      return reservation;
     }
 
     const arrival = this.parseDateOnly(dto.arrivalDate);
     const departure = this.parseDateOnly(dto.departureDate);
 
-    const candidates = await this.prisma.reservation.findMany({
+    let candidates = await this.prisma.reservation.findMany({
       where: { arrivalDate: arrival, departureDate: departure },
       include: { listing: true },
     });
+
+    if (candidates.length === 0) {
+      await this.sync.syncReservationsForStayDates(arrival, departure);
+      candidates = await this.prisma.reservation.findMany({
+        where: { arrivalDate: arrival, departureDate: departure },
+        include: { listing: true },
+      });
+    }
 
     if (candidates.length === 0) return null;
     if (candidates.length === 1) return candidates[0];
@@ -192,6 +262,7 @@ export class FonioVerificationService {
       verified: false,
       message: 'Multiple bookings match — please provide more details',
       ambiguousCount: narrowed.length,
+      hint: (await this.getRequirements()).hintDe,
     });
   }
 
@@ -237,7 +308,8 @@ export class FonioVerificationService {
   }
 
   private parseDateOnly(value: string): Date {
-    const [y, m, d] = value.split('-').map(Number);
+    const normalized = normalizeDateInput(value) ?? value;
+    const [y, m, d] = normalized.split('-').map(Number);
     return new Date(Date.UTC(y, m - 1, d));
   }
 

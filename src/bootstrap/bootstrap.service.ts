@@ -4,6 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { AdminRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RulesService } from '../rules/rules.service';
+import { normalizeVerificationConfigFields } from '../fonio/verification-fields';
 
 @Injectable()
 export class BootstrapService implements OnModuleInit {
@@ -48,22 +49,46 @@ export class BootstrapService implements OnModuleInit {
   }
 
   private async seedVerificationConfig() {
-    const count = await this.prisma.verificationConfig.count();
-    if (count > 0) return;
-
-    await this.prisma.verificationConfig.create({
-      data: {
-        name: 'default',
-        requiredFields: [
-          'stayDates',
-          'listingName',
-          'phone',
-          'email',
-          'reservationId',
-        ],
-        minMatchCount: 3,
-        isDefault: true,
-      },
+    const existing = await this.prisma.verificationConfig.findFirst({
+      where: { isDefault: true },
     });
+
+    if (!existing) {
+      await this.prisma.verificationConfig.create({
+        data: {
+          name: 'default',
+          requiredFields: [
+            'stayDates',
+            'listingName',
+            'phone',
+            'email',
+            'reservationId',
+          ],
+          minMatchCount: 3,
+          bookingOfferEnabled:
+            this.config.get('BOOKING_OFFER_ENABLED') !== 'false',
+          isDefault: true,
+        },
+      });
+      return;
+    }
+
+    const hasLegacyDates = existing.requiredFields.some(
+      (f) => f === 'arrivalDate' || f === 'departureDate',
+    );
+    const normalized = normalizeVerificationConfigFields(existing.requiredFields);
+    const fieldsChanged =
+      hasLegacyDates ||
+      JSON.stringify(normalized) !== JSON.stringify(existing.requiredFields);
+
+    if (fieldsChanged || (existing.minMatchCount ?? 0) < 1) {
+      await this.prisma.verificationConfig.update({
+        where: { id: existing.id },
+        data: {
+          requiredFields: normalized,
+          minMatchCount: existing.minMatchCount > 0 ? existing.minMatchCount : 3,
+        },
+      });
+    }
   }
 }

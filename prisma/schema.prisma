@@ -155,13 +155,14 @@ model Reservation {
 }
 
 model VerificationConfig {
-  id              String   @id @default(uuid())
-  name            String   @unique
-  requiredFields  String[]
-  minMatchCount   Int      @default(2)
-  isDefault       Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  name                String   @unique
+  requiredFields      String[]
+  minMatchCount       Int      @default(2)
+  bookingOfferEnabled Boolean  @default(true)
+  isDefault           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 model ApprovalRule {

@@ -63,21 +63,39 @@ Configure in **Admin → Rules & verification → Guest verification** (separate
 
 | Field | Meaning |
 |-------|---------|
-| Reservation number | Always required |
+| Stay dates | Always required (arrival + departure count as **one** match) |
+| Property name | Partial match on listing name |
 | Phone | Linked to booking |
 | Email | Booking email |
-| Arrival / departure | Travel dates |
-| Property name | Partial match on listing name |
+| Reservation number | Optional — speeds up lookup |
 
-Default: reservation + phone + arrival + departure must all match.
+Default: **3 of 5** scoring fields must match (stay dates always required as input).
+
+The API returns a German `hint` field explaining either/or logic — use it in the fonio prompt when verification fails.
 
 Test locally:
 
 ```bash
-npm run test:verify -- --reservationId=62144308 --phone=+491701234567 --arrival=2026-07-06 --departure=2026-07-16
+npm run test:verify -- --reservationId=62363926 --arrival=2026-08-08 --departure=2026-08-10 --phone=+4915150601701
+npm run test:verify -- --arrival=2026-08-08 --departure=2026-08-10 --listingName=Wiesenblick --email=f.vollmer@yahoo.de
 ```
 
 Use a real `hostawayId` from **Admin → Reservations**.
+
+## Automatic booking offer
+
+When availability is confirmed and the guest wants to book:
+
+```
+POST /api/v1/fonio/booking-offer
+```
+
+Required body: `listingId`, `checkIn`, `checkOut`, `guests`, `guestFirstName`, `guestLastName`, `guestEmail`, `phone`.
+
+Creates a reservation/inquiry in Hostaway (channel 2000). Your team sends the offer from Hostaway — **do not quote prices on the phone**.
+
+Enable/disable in **Admin → Rules & verification → Automatic booking offer (fonio)**.  
+`BOOKING_OFFER_ENABLED=false` in `.env` only applies as fallback when no admin config exists yet.
 
 ## Example call flow
 

@@ -16,10 +16,11 @@ import { FonioCallContextDto } from './dto/call-context.dto';
 import { GuestRequestDto } from './dto/guest-request.dto';
 import { GuestVerifyDto } from './dto/guest-verify.dto';
 import { FonioAvailabilityService } from './fonio-availability.service';
-import { ConfigService } from '@nestjs/config';
+import { FonioBookingOfferService } from './fonio-booking-offer.service';
 import { FonioCallContextService } from './fonio-call-context.service';
 import { FonioRequestsService } from './fonio-requests.service';
 import { FonioVerificationService } from './fonio-verification.service';
+import { BookingOfferDto } from './dto/booking-offer.dto';
 
 @ApiTags('fonio')
 @ApiSecurity('fonio-api-key')
@@ -31,13 +32,14 @@ export class FonioController {
     private readonly availability: FonioAvailabilityService,
     private readonly verification: FonioVerificationService,
     private readonly requests: FonioRequestsService,
+    private readonly bookingOffer: FonioBookingOfferService,
     private readonly audit: AuditLogService,
   ) {}
 
   @Get('setup')
   @ApiOperation({ summary: 'fonio.ai integration URLs (copy into fonio dashboard)' })
-  getSetup() {
-    return this.callContextService.getSetupUrls();
+  async getSetup() {
+    return this.callContextService.getSetupDetails();
   }
 
   @Post('call-context')
@@ -86,6 +88,14 @@ export class FonioController {
     return data;
   }
 
+  @Get('guest/verify/requirements')
+  @ApiOperation({
+    summary: 'What the caller must provide for verification (for fonio prompt)',
+  })
+  async getVerifyRequirements() {
+    return this.verification.getRequirements();
+  }
+
   @Post('guest/verify')
   @ApiOperation({ summary: 'Verify guest before sharing booking details' })
   async verifyGuest(@Body() dto: GuestVerifyDto) {
@@ -101,6 +111,7 @@ export class FonioController {
           matchedFields: result.matchedFields,
           hadReservationId: Boolean(dto.reservationId),
           listingNameProvided: Boolean(dto.listingName),
+          hint: result.hint ?? null,
         },
       });
       return result;
@@ -123,6 +134,7 @@ export class FonioController {
           missingFields: body.missingFields ?? [],
           requiredMinMatches: body.requiredMinMatches ?? null,
           ambiguousCount: body.ambiguousCount ?? null,
+          hint: body.hint ?? null,
           hadReservationId: Boolean(dto.reservationId),
           arrivalDate: dto.arrivalDate,
           departureDate: dto.departureDate,
@@ -181,6 +193,31 @@ export class FonioController {
           typeof dto.details?.requestedTime === 'string'
             ? dto.details.requestedTime
             : null,
+      },
+    });
+    return result;
+  }
+
+  @Post('booking-offer')
+  @ApiOperation({
+    summary:
+      'Create a Hostaway booking inquiry when dates are available (no price quoted on phone)',
+  })
+  async createBookingOffer(@Body() dto: BookingOfferDto) {
+    const started = Date.now();
+    const result = await this.bookingOffer.createOffer(dto);
+    await this.audit.log({
+      source: 'fonio',
+      action: 'booking_offer',
+      durationMs: Date.now() - started,
+      metadata: {
+        offerCreated: result.offerCreated,
+        reservationId: result.reservationId,
+        listingId: result.listingId,
+        listingName: result.listingName,
+        checkIn: result.checkIn,
+        checkOut: result.checkOut,
+        guests: result.guests,
       },
     });
     return result;

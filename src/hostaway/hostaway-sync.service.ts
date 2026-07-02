@@ -457,6 +457,63 @@ export class HostawaySyncService implements OnModuleInit {
     };
   }
 
+  async syncSingleReservation(hostawayId: number) {
+    let remote: HostawayReservation;
+    try {
+      remote = await this.hostaway.getReservation(hostawayId);
+    } catch {
+      return null;
+    }
+
+    const listing = await this.prisma.listing.findUnique({
+      where: { hostawayId: remote.listingMapId },
+    });
+    if (!listing) return null;
+
+    const data = this.buildReservationData(remote, listing);
+    return this.prisma.reservation.upsert({
+      where: { hostawayId },
+      create: data.create,
+      update: data.update,
+      include: { listing: true },
+    });
+  }
+
+  async syncReservationsForStayDates(arrival: Date, departure: Date) {
+    const arrivalStr = arrival.toISOString().slice(0, 10);
+    const departureStr = departure.toISOString().slice(0, 10);
+
+    let remote: HostawayReservation[];
+    try {
+      remote = await this.hostaway.getAllReservations({
+        arrivalStartDate: arrivalStr,
+        arrivalEndDate: arrivalStr,
+      });
+    } catch {
+      return 0;
+    }
+
+    const matching = remote.filter(
+      (r) => r.arrivalDate === arrivalStr && r.departureDate === departureStr,
+    );
+
+    let count = 0;
+    for (const res of matching) {
+      const listing = await this.prisma.listing.findUnique({
+        where: { hostawayId: res.listingMapId },
+      });
+      if (!listing) continue;
+      const data = this.buildReservationData(res, listing);
+      await this.prisma.reservation.upsert({
+        where: { hostawayId: res.id },
+        create: data.create,
+        update: data.update,
+      });
+      count += 1;
+    }
+    return count;
+  }
+
   async refreshReservationConversation(hostawayReservationId: number) {
     const conversationId =
       await this.conversations.resolveConversationId(hostawayReservationId);
