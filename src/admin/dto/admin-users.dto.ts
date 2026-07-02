@@ -3,10 +3,13 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
+
+const MANAGED_ADMIN_ROLES = [AdminRole.ADMIN, AdminRole.SUPER_ADMIN] as const;
 
 export class CreateAdminUserDto {
   @IsEmail()
@@ -16,7 +19,7 @@ export class CreateAdminUserDto {
   @MinLength(8)
   password!: string;
 
-  @IsEnum(AdminRole)
+  @IsIn(MANAGED_ADMIN_ROLES)
   role!: AdminRole;
 }
 
@@ -31,7 +34,7 @@ export class UpdateAdminUserDto {
   password?: string;
 
   @IsOptional()
-  @IsEnum(AdminRole)
+  @IsIn(MANAGED_ADMIN_ROLES)
   role?: AdminRole;
 
   @IsOptional()

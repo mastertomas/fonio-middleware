@@ -25,6 +25,28 @@ const tableState = {
 };
 const searchTimers = {};
 
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+function formatDateTime(value) {
+  if (!value) return '–';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+function formatDate(value) {
+  if (!value) return '–';
+  const raw = String(value).slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw.replace(/-/g, '/');
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
+}
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
@@ -187,11 +209,11 @@ function formatSyncTime(last, inProgress) {
   if (!last?.startedAt) return '–';
   if (last.status === 'running' || inProgress) {
     const mins = Math.floor((Date.now() - new Date(last.startedAt).getTime()) / 60000);
-    return `${new Date(last.startedAt).toLocaleString(locale())} (${mins} min)`;
+    return `${formatDateTime(last.startedAt)} (${mins} min)`;
   }
   return last.finishedAt
-    ? new Date(last.finishedAt).toLocaleString(locale())
-    : new Date(last.startedAt).toLocaleString(locale());
+    ? formatDateTime(last.finishedAt)
+    : formatDateTime(last.startedAt);
 }
 
 function tableQuery(tabKey) {
@@ -372,7 +394,7 @@ function formatMessageContent(message) {
 function formatMessageDate(value) {
   if (!value) return '';
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString(locale());
+  return Number.isNaN(d.getTime()) ? value : formatDateTime(value);
 }
 
 function renderConversationMessage(message) {
@@ -770,7 +792,7 @@ async function loadDashboard() {
       ? `${meta.listings ?? 0} ${t('dashboard.listings')}, ${meta.reservations ?? 0} ${t('dashboard.reservations')}`
       : w.error || w.status;
     return `<tr>
-      <td>${new Date(w.startedAt).toLocaleString(locale())}</td>
+      <td>${formatDateTime(w.startedAt)}</td>
       <td>${esc(w.jobType.replace('webhook:', ''))}</td>
       <td>${esc(String(result))}</td>
     </tr>`;
@@ -842,8 +864,8 @@ async function loadReservations() {
       <td>${esc(r.guestEmail || '–')}</td>
       <td>${esc(r.listing?.name || '–')}</td>
       <td>${esc(r.listing?.listingGroup?.name || '–')}</td>
-      <td>${r.arrivalDate?.slice(0, 10)}</td>
-      <td>${r.departureDate?.slice(0, 10)}</td>
+      <td>${formatDate(r.arrivalDate)}</td>
+      <td>${formatDate(r.departureDate)}</td>
       <td>${r.status}</td>
     </tr>
   `).join('');
@@ -866,7 +888,7 @@ async function loadConversations() {
       <td>${esc(r.guestName || '–')}</td>
       <td>${esc(r.listing?.name || '–')}</td>
       <td>${r.hostawayConversationId ?? '–'}</td>
-      <td>${r.lastSyncedAt ? new Date(r.lastSyncedAt).toLocaleString(locale()) : '–'}</td>
+      <td>${r.lastSyncedAt ? formatDateTime(r.lastSyncedAt) : '–'}</td>
       <td>
         <button type="button" class="btn ghost btn-sm" data-view-conv="${r.hostawayId}">${t('conversations.view')}</button>
         <button type="button" class="btn ghost btn-sm" data-refresh-conv="${r.hostawayId}">${t('conversations.refresh')}</button>
@@ -1065,7 +1087,7 @@ async function loadRequests() {
       : t('requests.inboxNa');
     return `
     <tr>
-      <td>${new Date(r.createdAt).toLocaleString(locale())}</td>
+      <td>${formatDateTime(r.createdAt)}</td>
       <td>${t(`requestType.${r.requestType}`) || r.requestType}</td>
       <td><span class="badge manual">${r.status}</span></td>
       <td>${r.reservation?.listing?.name || '–'}</td>
@@ -1123,7 +1145,7 @@ async function loadLogs() {
   ].join(' '));
   const rows = data.items.map((l) => `
     <tr>
-      <td>${new Date(l.createdAt).toLocaleString(locale())}</td>
+      <td>${formatDateTime(l.createdAt)}</td>
       <td>${l.source}</td>
       <td>${l.action}</td>
       <td>${l.statusCode || '–'}</td>
@@ -1144,7 +1166,7 @@ function resetUserForm() {
   $('#user-email').removeAttribute('readonly');
   $('#user-password').value = '';
   $('#user-password').required = true;
-  $('#user-role').value = 'EDITOR';
+  $('#user-role').value = 'ADMIN';
   $('#user-active').checked = true;
   $('#user-form-title').textContent = t('users.addUser');
   $('#user-submit-btn').textContent = t('users.addUser');
@@ -1160,7 +1182,7 @@ function loadUserIntoForm(user) {
   $('#user-email').setAttribute('readonly', 'readonly');
   $('#user-password').value = '';
   $('#user-password').required = false;
-  $('#user-role').value = user.role;
+  $('#user-role').value = ['ADMIN', 'SUPER_ADMIN'].includes(user.role) ? user.role : 'ADMIN';
   $('#user-active').checked = user.isActive;
   $('#user-form-title').textContent = t('users.editUser');
   $('#user-submit-btn').textContent = t('users.save');
@@ -1203,7 +1225,7 @@ async function loadUsers() {
       <td>${esc(u.email)}</td>
       <td>${formatRoleLabel(u.role)}</td>
       <td>${u.isActive ? t('users.active') : t('users.inactive')}</td>
-      <td>${new Date(u.createdAt).toLocaleString(locale())}</td>
+      <td>${formatDateTime(u.createdAt)}</td>
     </tr>
   `).join('');
   $('#users-table').innerHTML = `

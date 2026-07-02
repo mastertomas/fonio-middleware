@@ -19,6 +19,8 @@ const PUBLIC_USER_SELECT = {
   updatedAt: true,
 } as const;
 
+const MANAGED_ROLES = new Set<AdminRole>([AdminRole.ADMIN, AdminRole.SUPER_ADMIN]);
+
 @Injectable()
 export class AdminUsersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -31,6 +33,7 @@ export class AdminUsersService {
   }
 
   async create(dto: CreateAdminUserDto) {
+    this.assertManagedRole(dto.role);
     const existing = await this.prisma.adminUser.findUnique({
       where: { email: dto.email },
     });
@@ -65,6 +68,7 @@ export class AdminUsersService {
     }
 
     if (dto.role !== undefined && dto.role !== user.role) {
+      this.assertManagedRole(dto.role);
       await this.assertCanChangeSuperAdminRole(user, dto.role, actorId);
     }
 
@@ -142,5 +146,11 @@ export class AdminUsersService {
     return this.prisma.adminUser.count({
       where: { role: AdminRole.SUPER_ADMIN, isActive: true },
     });
+  }
+
+  private assertManagedRole(role: AdminRole) {
+    if (!MANAGED_ROLES.has(role)) {
+      throw new BadRequestException('Role must be ADMIN or SUPER_ADMIN');
+    }
   }
 }
