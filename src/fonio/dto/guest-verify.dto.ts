@@ -1,8 +1,17 @@
-import { IsEmail, IsInt, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsEmail,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+} from 'class-validator';
 
 export class GuestVerifyDto {
+  @IsOptional()
+  @Type(() => Number)
   @IsInt()
-  reservationId!: number;
+  reservationId?: number;
 
   @IsOptional()
   @IsString()
@@ -12,13 +21,13 @@ export class GuestVerifyDto {
   @IsEmail()
   email?: string;
 
-  @IsOptional()
   @IsString()
-  arrivalDate?: string;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  arrivalDate!: string;
 
-  @IsOptional()
   @IsString()
-  departureDate?: string;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  departureDate!: string;
 
   @IsOptional()
   @IsString()

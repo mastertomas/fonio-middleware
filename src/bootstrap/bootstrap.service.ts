@@ -55,12 +55,13 @@ export class BootstrapService implements OnModuleInit {
       data: {
         name: 'default',
         requiredFields: [
-          'reservationId',
+          'stayDates',
+          'listingName',
           'phone',
-          'arrivalDate',
-          'departureDate',
+          'email',
+          'reservationId',
         ],
-        minMatchCount: 4,
+        minMatchCount: 3,
         isDefault: true,
       },
     });

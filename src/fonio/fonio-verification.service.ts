@@ -13,7 +13,7 @@ import { HostawayClient } from '../hostaway/hostaway.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GuestVerifyDto } from './dto/guest-verify.dto';
 import {
-  isVerificationField,
+  normalizeVerificationConfigFields,
   VERIFICATION_FIELD_OPTIONS,
   VerificationField,
 } from './verification-fields';
@@ -33,11 +33,9 @@ export class FonioVerificationService {
   ) {}
 
   async verify(dto: GuestVerifyDto) {
-    const reservation = await this.prisma.reservation.findUnique({
-      where: { hostawayId: dto.reservationId },
-      include: { listing: true },
-    });
+    this.assertStayDatesProvided(dto);
 
+    const reservation = await this.findReservation(dto);
     if (!reservation) {
       throw new UnauthorizedException({
         verified: false,
@@ -45,32 +43,23 @@ export class FonioVerificationService {
       });
     }
 
+    const resolved = reservation;
+
     const config = await this.prisma.verificationConfig.findFirst({
       where: { isDefault: true },
     });
 
-    const requiredFields = this.normalizeRequiredFields(
-      config?.requiredFields ?? ['reservationId', 'phone', 'arrivalDate'],
-    );
+    const scoringFields = this.getScoringFields(config?.requiredFields);
     const minMatch = Math.min(
-      config?.minMatchCount ?? requiredFields.length,
-      requiredFields.length,
+      config?.minMatchCount ?? 3,
+      scoringFields.length,
     );
-
-    const missing = this.missingRequiredInputs(dto, requiredFields);
-    if (missing.length > 0) {
-      throw new UnauthorizedException({
-        verified: false,
-        message: 'Missing required verification fields',
-        missingFields: missing,
-      });
-    }
 
     const checks: string[] = [];
     let matches = 0;
 
-    for (const field of requiredFields) {
-      const matched = await this.fieldMatches(field, dto, reservation);
+    for (const field of scoringFields) {
+      const matched = await this.fieldMatches(field, dto, resolved);
       if (matched) {
         matches++;
         checks.push(field);
@@ -83,13 +72,14 @@ export class FonioVerificationService {
         message: 'Guest verification failed',
         matchedFields: checks,
         requiredMinMatches: minMatch,
+        reservationId: resolved.hostawayId,
       });
     }
 
     const token = await this.jwt.signAsync({
-      sub: reservation.id,
-      reservationHostawayId: reservation.hostawayId,
-      listingHostawayId: reservation.listing.hostawayId,
+      sub: resolved.id,
+      reservationHostawayId: resolved.hostawayId,
+      listingHostawayId: resolved.listing.hostawayId,
     } satisfies VerifiedSessionPayload);
 
     return {
@@ -97,13 +87,13 @@ export class FonioVerificationService {
       verificationToken: token,
       matchedFields: checks,
       reservation: {
-        id: reservation.hostawayId,
-        arrivalDate: reservation.arrivalDate.toISOString().slice(0, 10),
-        departureDate: reservation.departureDate.toISOString().slice(0, 10),
-        guests: reservation.numberOfGuests,
-        listingName: reservation.listing.name,
-        listingCity: reservation.listing.city,
-        status: reservation.status,
+        id: resolved.hostawayId,
+        arrivalDate: resolved.arrivalDate.toISOString().slice(0, 10),
+        departureDate: resolved.departureDate.toISOString().slice(0, 10),
+        guests: resolved.numberOfGuests,
+        listingName: resolved.listing.name,
+        listingCity: resolved.listing.city,
+        status: resolved.status,
       },
     };
   }
@@ -150,41 +140,105 @@ export class FonioVerificationService {
     };
   }
 
-  private normalizeRequiredFields(fields: string[]): VerificationField[] {
-    const normalized = fields.filter(isVerificationField);
-    if (!normalized.includes('reservationId')) {
-      normalized.unshift('reservationId');
-    }
-    return [...new Set(normalized)];
+  private getScoringFields(configFields?: string[]): VerificationField[] {
+    const normalized = normalizeVerificationConfigFields(
+      configFields ?? [
+        'stayDates',
+        'listingName',
+        'phone',
+        'email',
+        'reservationId',
+      ],
+    );
+    return normalized.length > 0
+      ? normalized
+      : [...VERIFICATION_FIELD_OPTIONS];
   }
 
-  private missingRequiredInputs(
+  private assertStayDatesProvided(dto: GuestVerifyDto) {
+    if (!dto.arrivalDate?.trim() || !dto.departureDate?.trim()) {
+      throw new UnauthorizedException({
+        verified: false,
+        message: 'Arrival and departure dates are required',
+        missingFields: ['stayDates'],
+      });
+    }
+  }
+
+  private async findReservation(dto: GuestVerifyDto) {
+    if (dto.reservationId) {
+      return this.prisma.reservation.findUnique({
+        where: { hostawayId: dto.reservationId },
+        include: { listing: true },
+      });
+    }
+
+    const arrival = this.parseDateOnly(dto.arrivalDate);
+    const departure = this.parseDateOnly(dto.departureDate);
+
+    const candidates = await this.prisma.reservation.findMany({
+      where: { arrivalDate: arrival, departureDate: departure },
+      include: { listing: true },
+    });
+
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0];
+
+    const narrowed = await this.narrowCandidates(dto, candidates);
+    if (narrowed.length === 1) return narrowed[0];
+    if (narrowed.length === 0) return null;
+
+    throw new UnauthorizedException({
+      verified: false,
+      message: 'Multiple bookings match — please provide more details',
+      ambiguousCount: narrowed.length,
+    });
+  }
+
+  private async narrowCandidates(
     dto: GuestVerifyDto,
-    requiredFields: VerificationField[],
-  ): VerificationField[] {
-    const missing: VerificationField[] = [];
-    for (const field of requiredFields) {
-      if (field === 'reservationId') continue;
-      if (!this.isProvided(dto, field)) missing.push(field);
+    candidates: NonNullable<
+      Awaited<
+        ReturnType<
+          typeof this.prisma.reservation.findMany<{
+            include: { listing: true };
+          }>
+        >
+      >
+    >[number][],
+  ) {
+    let pool = [...candidates];
+
+    if (dto.listingName?.trim()) {
+      const term = dto.listingName.trim().toLowerCase();
+      const byListing = pool.filter((r) =>
+        r.listing.name.toLowerCase().includes(term),
+      );
+      if (byListing.length > 0) pool = byListing;
     }
-    return missing;
+
+    if (dto.phone?.trim()) {
+      const byPhone: typeof pool = [];
+      for (const r of pool) {
+        if (await this.verifyPhone(dto.phone, r)) byPhone.push(r);
+      }
+      if (byPhone.length > 0) pool = byPhone;
+    }
+
+    if (dto.email?.trim()) {
+      const byEmail: typeof pool = [];
+      for (const r of pool) {
+        if (await this.verifyEmail(dto.email, r)) byEmail.push(r);
+      }
+      if (byEmail.length > 0) pool = byEmail;
+    }
+
+    return pool;
   }
 
-  private isProvided(dto: GuestVerifyDto, field: VerificationField): boolean {
-    switch (field) {
-      case 'phone':
-        return Boolean(dto.phone?.trim());
-      case 'email':
-        return Boolean(dto.email?.trim());
-      case 'arrivalDate':
-        return Boolean(dto.arrivalDate?.trim());
-      case 'departureDate':
-        return Boolean(dto.departureDate?.trim());
-      case 'listingName':
-        return Boolean(dto.listingName?.trim());
-      default:
-        return true;
-    }
+  private parseDateOnly(value: string): Date {
+    const [y, m, d] = value.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
   }
 
   private async fieldMatches(
@@ -202,23 +256,26 @@ export class FonioVerificationService {
     },
   ): Promise<boolean> {
     switch (field) {
+      case 'stayDates':
+        return (
+          dto.arrivalDate ===
+            reservation.arrivalDate.toISOString().slice(0, 10) &&
+          dto.departureDate ===
+            reservation.departureDate.toISOString().slice(0, 10)
+        );
       case 'reservationId':
-        return dto.reservationId === reservation.hostawayId;
+        return (
+          dto.reservationId !== undefined &&
+          dto.reservationId === reservation.hostawayId
+        );
       case 'phone':
         return dto.phone
           ? await this.verifyPhone(dto.phone, reservation)
           : false;
       case 'email':
-        return dto.email ? this.verifyEmail(dto.email, reservation) : false;
-      case 'arrivalDate':
-        return (
-          dto.arrivalDate === reservation.arrivalDate.toISOString().slice(0, 10)
-        );
-      case 'departureDate':
-        return (
-          dto.departureDate ===
-          reservation.departureDate.toISOString().slice(0, 10)
-        );
+        return dto.email
+          ? await this.verifyEmail(dto.email, reservation)
+          : false;
       case 'listingName': {
         if (!dto.listingName) return false;
         return reservation.listing.name

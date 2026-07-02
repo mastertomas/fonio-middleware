@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * Guest verification smoke test.
- * Usage: npm run test:verify -- --reservationId=123 --phone=+49... --arrival=2026-07-06 --departure=2026-07-16
+ * Usage:
+ *   npm run test:verify -- --reservationId=123 --phone=+49... --arrival=2026-07-06 --departure=2026-07-16
+ *   npm run test:verify -- --arrival=2026-08-08 --departure=2026-08-10 --listingName=Wiesenblick --email=guest@example.com
  */
 import 'dotenv/config';
 
@@ -20,18 +22,21 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const reservationId = Number(args.reservationId || args.id);
-if (!Number.isFinite(reservationId)) {
-  console.error('ERROR: Pass --reservationId=HOSTAWAY_ID (from Reservations tab)');
+const reservationId = args.reservationId || args.id
+  ? Number(args.reservationId || args.id)
+  : undefined;
+
+if (!args.arrival && !args.arrivalDate) {
+  console.error('ERROR: Pass --arrival=YYYY-MM-DD and --departure=YYYY-MM-DD');
   process.exit(1);
 }
 
 const body = {
-  reservationId,
+  reservationId: Number.isFinite(reservationId) ? reservationId : undefined,
   phone: args.phone || undefined,
   email: args.email || undefined,
-  arrivalDate: args.arrival || args.arrivalDate || undefined,
-  departureDate: args.departure || args.departureDate || undefined,
+  arrivalDate: args.arrival || args.arrivalDate,
+  departureDate: args.departure || args.departureDate,
   listingName: args.listingName || undefined,
 };
 

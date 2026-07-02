@@ -452,6 +452,23 @@ tr:last-child td { border-bottom: none; }
   outline: 1px solid var(--primary);
 }
 
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+th.sortable:hover {
+  color: var(--primary);
+}
+
+.metadata-cell {
+  max-width: 28rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  word-break: break-word;
+}
+
 .url-row {
   display: flex;
   align-items: flex-start;

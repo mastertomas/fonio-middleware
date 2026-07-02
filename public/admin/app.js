@@ -13,15 +13,16 @@ let dashboardPoll = null;
 let syncSettingsDirty = false;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const tableState = {
-  listings: { page: 1, pageSize: 10, search: '' },
-  groups: { page: 1, pageSize: 10, search: '' },
-  reservations: { page: 1, pageSize: 10, search: '' },
+  listings: { page: 1, pageSize: 10, search: '', sortBy: 'name', sortDir: 'asc' },
+  groups: { page: 1, pageSize: 10, search: '', sortBy: 'name', sortDir: 'asc' },
+  reservations: { page: 1, pageSize: 10, search: '', sortBy: 'arrivalDate', sortDir: 'desc' },
   conversations: { page: 1, pageSize: 10, search: '' },
-  rules: { page: 1, pageSize: 10, search: '' },
-  requests: { page: 1, pageSize: 10, search: '' },
-  logs: { page: 1, pageSize: 10, search: '' },
+  rules: { page: 1, pageSize: 10, search: '', sortBy: 'priority', sortDir: 'asc' },
+  requests: { page: 1, pageSize: 10, search: '', sortBy: 'createdAt', sortDir: 'desc' },
+  logs: { page: 1, pageSize: 10, search: '', sortBy: 'createdAt', sortDir: 'desc' },
   webhooks: { page: 1, pageSize: 10, search: '' },
-  users: { page: 1, pageSize: 10, search: '' },
+  users: { page: 1, pageSize: 10, search: '', sortBy: 'createdAt', sortDir: 'desc' },
+  fonioActivity: { page: 1, pageSize: 25, search: '', sortBy: 'createdAt', sortDir: 'desc' },
 };
 const searchTimers = {};
 
@@ -167,6 +168,7 @@ function refreshActiveTab() {
     rules: loadRules,
     requests: loadRequests,
     logs: loadLogs,
+    fonioActivity: loadFonioActivity,
     fonio: loadFonio,
     users: loadUsers,
   };
@@ -222,7 +224,66 @@ function tableQuery(tabKey) {
   params.set('page', String(s.page));
   params.set('pageSize', String(s.pageSize));
   if (s.search.trim()) params.set('search', s.search.trim());
+  if (s.sortBy) {
+    params.set('sortBy', s.sortBy);
+    params.set('sortDir', s.sortDir || 'asc');
+  }
   return params.toString();
+}
+
+function sortIndicator(tabKey, column) {
+  const s = tableState[tabKey];
+  if (s.sortBy !== column) return '';
+  return s.sortDir === 'asc' ? ' ▲' : ' ▼';
+}
+
+function sortTh(tabKey, column, label) {
+  return `<th class="sortable" data-sort="${column}" role="button" tabindex="0">${label}${sortIndicator(tabKey, column)}</th>`;
+}
+
+function toggleSort(tabKey, column) {
+  const s = tableState[tabKey];
+  if (s.sortBy === column) {
+    s.sortDir = s.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    s.sortBy = column;
+    s.sortDir = column === 'arrivalDate' || column === 'departureDate' || column === 'createdAt' ? 'desc' : 'asc';
+  }
+  s.page = 1;
+}
+
+function bindSortableHeaders(containerSelector, tabKey, loader) {
+  $$(`${containerSelector} th[data-sort]`).forEach((th) => {
+    const activate = () => {
+      toggleSort(tabKey, th.dataset.sort);
+      loader();
+    };
+    th.addEventListener('click', activate);
+    th.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate();
+      }
+    });
+  });
+}
+
+function compareSort(a, b, sortBy, sortDir) {
+  const pick = (row) => {
+    if (sortBy === 'listingName') return row.reservation?.listing?.name ?? row.listing?.name ?? '';
+    if (sortBy === 'requestType') return row.requestType ?? '';
+    if (sortBy === 'action') return row.action ?? '';
+    if (sortBy === 'source') return row.source ?? '';
+    if (sortBy === 'email') return row.email ?? '';
+    if (sortBy === 'role') return row.role ?? '';
+    return row[sortBy] ?? '';
+  };
+  const av = pick(a);
+  const bv = pick(b);
+  let cmp = 0;
+  if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+  else cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
+  return sortDir === 'desc' ? -cmp : cmp;
 }
 
 function ensureTableToolbar(toolbarId, tabKey, loader) {
@@ -334,7 +395,7 @@ function renderPagination(containerId, data, tabKey, loader) {
 }
 
 function paginateClient(items, tabKey, searchFields) {
-  const { page, pageSize, search } = tableState[tabKey];
+  const { page, pageSize, search, sortBy, sortDir } = tableState[tabKey];
   const q = search.trim().toLowerCase();
   let filtered = items;
   if (q) {
@@ -342,6 +403,9 @@ function paginateClient(items, tabKey, searchFields) {
       const haystack = searchFields(item).toLowerCase();
       return haystack.includes(q);
     });
+  }
+  if (sortBy) {
+    filtered = [...filtered].sort((a, b) => compareSort(a, b, sortBy, sortDir || 'asc'));
   }
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -824,9 +888,15 @@ async function loadListings() {
   `).join('');
   $('#listings-table').innerHTML = `
     <table><thead><tr>
-      <th>${t('listings.id')}</th><th>${t('listings.name')}</th><th>${t('listings.city')}</th>
-      <th>${t('listings.group')}</th><th>${t('listings.guests')}</th><th>${t('listings.status')}</th><th>${t('listings.bookable')}</th>
+      ${sortTh('listings', 'hostawayId', t('listings.id'))}
+      ${sortTh('listings', 'name', t('listings.name'))}
+      ${sortTh('listings', 'city', t('listings.city'))}
+      <th>${t('listings.group')}</th>
+      ${sortTh('listings', 'personCapacity', t('listings.guests'))}
+      ${sortTh('listings', 'status', t('listings.status'))}
+      <th>${t('listings.bookable')}</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="7">${t('table.infoEmpty')}</td></tr>`}</tbody></table>`;
+  bindSortableHeaders('#listings-table', 'listings', loadListings);
   renderTableInfo('#listings-info', data);
   renderPagination('#listings-pagination', data, 'listings', loadListings);
 }
@@ -846,9 +916,12 @@ async function loadGroups() {
   `).join('');
   $('#listing-groups-table').innerHTML = `
     <table><thead><tr>
-      <th>ID</th><th>${t('listings.name')}</th><th>${t('listings.city')}</th>
+      ${sortTh('groups', 'hostawayParentId', 'ID')}
+      ${sortTh('groups', 'name', t('listings.name'))}
+      ${sortTh('groups', 'city', t('listings.city'))}
       <th>Mode</th><th>#</th><th>${t('listings.title')}</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="6">${t('table.infoEmpty')}</td></tr>`}</tbody></table>`;
+  bindSortableHeaders('#listing-groups-table', 'groups', loadGroups);
   renderTableInfo('#groups-info', data);
   renderPagination('#groups-pagination', data, 'groups', loadGroups);
 }
@@ -871,10 +944,16 @@ async function loadReservations() {
   `).join('');
   $('#reservations-table').innerHTML = `
     <table><thead><tr>
-      <th>ID</th><th>${t('listings.guest')}</th><th>${t('listings.phone')}</th><th>${t('listings.email')}</th>
-      <th>${t('listings.name')}</th><th>${t('listings.group')}</th>
-      <th>${t('listings.arrival')}</th><th>${t('listings.departure')}</th><th>${t('listings.status')}</th>
+      ${sortTh('reservations', 'hostawayId', 'ID')}
+      ${sortTh('reservations', 'guestName', t('listings.guest'))}
+      <th>${t('listings.phone')}</th><th>${t('listings.email')}</th>
+      ${sortTh('reservations', 'listingName', t('listings.name'))}
+      <th>${t('listings.group')}</th>
+      ${sortTh('reservations', 'arrivalDate', t('listings.arrival'))}
+      ${sortTh('reservations', 'departureDate', t('listings.departure'))}
+      ${sortTh('reservations', 'status', t('listings.status'))}
     </tr></thead><tbody>${rows || `<tr><td colspan="9">${t('table.infoEmpty')}</td></tr>`}</tbody></table>`;
+  bindSortableHeaders('#reservations-table', 'reservations', loadReservations);
   renderTableInfo('#reservations-info', data);
   renderPagination('#reservations-pagination', data, 'reservations', loadReservations);
 }
@@ -956,24 +1035,36 @@ $('#conversation-modal').addEventListener('click', (e) => {
 });
 
 const VERIFICATION_FIELDS = [
-  'reservationId',
+  'stayDates',
+  'listingName',
   'phone',
   'email',
-  'arrivalDate',
-  'departureDate',
-  'listingName',
+  'reservationId',
 ];
+
+function normalizeVerificationFields(fields) {
+  const set = new Set();
+  for (const field of fields ?? []) {
+    if (field === 'arrivalDate' || field === 'departureDate' || field === 'stayDates') {
+      set.add('stayDates');
+    } else if (VERIFICATION_FIELDS.includes(field)) {
+      set.add(field);
+    }
+  }
+  if (!set.has('stayDates')) set.add('stayDates');
+  return VERIFICATION_FIELDS.filter((f) => set.has(f));
+}
 
 function renderVerificationForm(config, fieldMeta) {
   const container = $('#verification-field-checkboxes');
   if (!container) return;
-  const selected = new Set(config?.requiredFields ?? ['reservationId', 'phone', 'arrivalDate']);
+  const selected = new Set(normalizeVerificationFields(config?.requiredFields));
   $('#verification-config-id').value = config?.id ?? '';
-  $('#verification-min-match').value = config?.minMatchCount ?? selected.size;
+  $('#verification-min-match').value = config?.minMatchCount ?? 3;
   $('#verification-min-match').max = VERIFICATION_FIELDS.length;
 
   container.innerHTML = VERIFICATION_FIELDS.map((field) => {
-    const locked = field === 'reservationId';
+    const locked = field === 'stayDates';
     const checked = locked || selected.has(field);
     const label = t(`verification.field.${field}`);
     const hint = fieldMeta?.descriptions?.[field] ?? '';
@@ -982,7 +1073,7 @@ function renderVerificationForm(config, fieldMeta) {
         <input type="checkbox" name="verification-field" value="${field}" ${checked ? 'checked' : ''} ${locked ? 'disabled' : ''} />
         <span>
           <strong>${label}</strong>
-          ${locked ? `<em class="field-hint">(${t('verification.field.reservationIdLocked')})</em>` : ''}
+          ${locked ? `<em class="field-hint">(${t('verification.field.stayDatesLocked')})</em>` : ''}
           ${hint ? `<br><span class="field-hint">${esc(hint)}</span>` : ''}
         </span>
       </label>`;
@@ -990,9 +1081,9 @@ function renderVerificationForm(config, fieldMeta) {
 }
 
 function getVerificationFormData() {
-  const fields = ['reservationId'];
+  const fields = ['stayDates'];
   $$('input[name="verification-field"]:checked').forEach((cb) => {
-    if (cb.value !== 'reservationId') fields.push(cb.value);
+    if (cb.value !== 'stayDates') fields.push(cb.value);
   });
   const minMatch = Number($('#verification-min-match').value);
   return {
@@ -1142,6 +1233,7 @@ async function loadLogs() {
     l.source,
     l.action,
     l.statusCode,
+    JSON.stringify(l.metadata ?? {}),
   ].join(' '));
   const rows = data.items.map((l) => `
     <tr>
@@ -1149,14 +1241,87 @@ async function loadLogs() {
       <td>${l.source}</td>
       <td>${l.action}</td>
       <td>${l.statusCode || '–'}</td>
+      <td class="metadata-cell">${esc(formatLogMetadata(l.metadata))}</td>
     </tr>
   `).join('');
   $('#logs-table').innerHTML = `
     <table><thead><tr>
-      <th>${t('logs.time')}</th><th>${t('logs.source')}</th><th>${t('logs.action')}</th><th>${t('logs.status')}</th>
+      ${sortTh('logs', 'createdAt', t('logs.time'))}
+      ${sortTh('logs', 'source', t('logs.source'))}
+      ${sortTh('logs', 'action', t('logs.action'))}
+      <th>${t('logs.status')}</th>
+      <th>${t('logs.details')}</th>
     </tr></thead><tbody>${rows}</tbody></table>`;
+  bindSortableHeaders('#logs-table', 'logs', loadLogs);
   renderTableInfo('#logs-info', data, data.maxTotal);
   renderPagination('#logs-pagination', data, 'logs', loadLogs);
+}
+
+function formatLogMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object') return '–';
+  return Object.entries(metadata)
+    .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`)
+    .join(' · ');
+}
+
+async function loadFonioActivity() {
+  const logs = await api('/fonio-activity');
+  ensureTableToolbar('#fonio-activity-toolbar', 'fonioActivity', loadFonioActivity);
+  const data = paginateClient(logs, 'fonioActivity', (l) => [
+    l.createdAt,
+    l.action,
+    l.statusCode,
+    JSON.stringify(l.metadata ?? {}),
+  ].join(' '));
+  const rows = data.items.map((l) => {
+    const meta = l.metadata ?? {};
+    const summary = formatFonioActionSummary(l.action, meta);
+    return `
+    <tr>
+      <td>${formatDateTime(l.createdAt)}</td>
+      <td>${l.action}</td>
+      <td>${l.statusCode || '–'}</td>
+      <td>${summary}</td>
+      <td class="metadata-cell">${esc(formatLogMetadata(meta))}</td>
+    </tr>`;
+  }).join('');
+  $('#fonio-activity-table').innerHTML = `
+    <table><thead><tr>
+      ${sortTh('fonioActivity', 'createdAt', t('logs.time'))}
+      ${sortTh('fonioActivity', 'action', t('fonioActivity.action'))}
+      <th>${t('logs.status')}</th>
+      <th>${t('fonioActivity.summary')}</th>
+      <th>${t('fonioActivity.details')}</th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="5">${t('fonioActivity.none')}</td></tr>`}</tbody></table>`;
+  bindSortableHeaders('#fonio-activity-table', 'fonioActivity', loadFonioActivity);
+  renderTableInfo('#fonio-activity-info', data, data.maxTotal);
+  renderPagination('#fonio-activity-pagination', data, 'fonioActivity', loadFonioActivity);
+}
+
+function formatFonioActionSummary(action, meta) {
+  switch (action) {
+    case 'call_context':
+      return meta.caller_recognized ? t('fonioActivity.callerRecognized') : t('fonioActivity.callerUnknown');
+    case 'availability_search':
+      return t('fonioActivity.availabilityResult', {
+        city: meta.city ?? '–',
+        count: meta.availableCount ?? 0,
+        source: meta.dataSource ?? 'cache',
+      });
+    case 'guest_verify':
+      return meta.verified
+        ? t('fonioActivity.verifyOk', { id: meta.reservationId ?? '–' })
+        : t('fonioActivity.verifyFail', { message: meta.message ?? '–' });
+    case 'guest_reservation':
+      return t('fonioActivity.reservationFetched', { name: meta.listingName ?? '–' });
+    case 'guest_request':
+      return t('fonioActivity.requestResult', {
+        type: meta.requestType ?? '–',
+        status: meta.status ?? '–',
+      });
+    default:
+      return '–';
+  }
 }
 
 function resetUserForm() {

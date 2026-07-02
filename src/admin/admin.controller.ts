@@ -21,11 +21,13 @@ import {
   paginated,
   PaginationQueryDto,
 } from '../common/dto/pagination-query.dto';
+import { SortablePaginationQueryDto } from '../common/dto/sortable-pagination-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { maskReservationForViewer } from '../common/utils/pii.util';
 import { FonioCallContextService } from '../fonio/fonio-call-context.service';
 import { FonioVerificationService } from '../fonio/fonio-verification.service';
+import { normalizeVerificationConfigFields } from '../fonio/verification-fields';
 import { HostawayClient } from '../hostaway/hostaway.client';
 import { HostawayConversationService } from '../hostaway/hostaway-conversation.service';
 import { GuestRequestInboxService } from '../hostaway/guest-request-inbox.service';
@@ -62,15 +64,16 @@ export class AdminController {
 
   @Get('listings')
   @ApiOperation({ summary: 'List synced listings (paginated)' })
-  async listListings(@Query() query: PaginationQueryDto) {
+  async listListings(@Query() query: SortablePaginationQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 25;
     const where = this.buildListingSearch(query.search);
+    const orderBy = this.buildListingOrder(query.sortBy, query.sortDir);
     const [total, items] = await Promise.all([
       this.prisma.listing.count({ where }),
       this.prisma.listing.findMany({
         where,
-        orderBy: { name: 'asc' },
+        orderBy,
         include: { listingGroup: true },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -81,16 +84,17 @@ export class AdminController {
 
   @Get('listing-groups')
   @ApiOperation({ summary: 'List parent/child listing groups (paginated)' })
-  async listGroups(@Query() query: PaginationQueryDto) {
+  async listGroups(@Query() query: SortablePaginationQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 25;
     const where = this.buildGroupSearch(query.search);
+    const orderBy = this.buildGroupOrder(query.sortBy, query.sortDir);
     const [total, items] = await Promise.all([
       this.prisma.listingGroup.count({ where }),
       this.prisma.listingGroup.findMany({
         where,
         include: { listings: true },
-        orderBy: { name: 'asc' },
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -137,19 +141,20 @@ export class AdminController {
   @Get('reservations')
   @ApiOperation({ summary: 'Synced reservations (VIEWER: masked contact data)' })
   async listReservations(
-    @Query() query: PaginationQueryDto,
+    @Query() query: SortablePaginationQueryDto,
     @Req() req: Request & { user: { role: AdminRole } },
   ) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 25;
     const where = this.buildReservationSearch(query.search);
+    const orderBy = this.buildReservationOrder(query.sortBy, query.sortDir);
     const [total, items] = await Promise.all([
       this.prisma.reservation.count({ where }),
       this.prisma.reservation.findMany({
         where,
         skip: (page - 1) * pageSize,
         take: pageSize,
-        orderBy: { arrivalDate: 'desc' },
+        orderBy,
         include: {
           listing: { include: { listingGroup: true } },
         },
@@ -351,12 +356,13 @@ export class AdminController {
     return {
       fields: FonioVerificationService.getFieldOptions(),
       descriptions: {
-        reservationId: 'Hostaway reservation number (always required in API)',
+        stayDates:
+          'Arrival + departure dates (always required from caller; counts as one match)',
+        listingName: 'Booked property name (partial match, e.g. Wiesenblick)',
         phone: 'Phone number linked to the booking',
         email: 'Email address on the booking',
-        arrivalDate: 'Check-in date (YYYY-MM-DD)',
-        departureDate: 'Check-out date (YYYY-MM-DD)',
-        listingName: 'Booked property name (partial match)',
+        reservationId:
+          'Hostaway reservation number (optional — counts as one match if provided)',
       },
     };
   }
@@ -368,12 +374,13 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: UpdateVerificationConfigDto,
   ) {
-    const fields = dto.requiredFields?.includes('reservationId')
-      ? dto.requiredFields
-      : ['reservationId', ...(dto.requiredFields ?? [])];
-    const uniqueFields = [...new Set(fields)];
+    const uniqueFields = [
+      ...new Set(
+        normalizeVerificationConfigFields(dto.requiredFields ?? ['stayDates']),
+      ),
+    ];
     const minMatch = Math.min(
-      dto.minMatchCount ?? uniqueFields.length,
+      dto.minMatchCount ?? 3,
       uniqueFields.length,
     );
     return this.prisma.verificationConfig.update({
@@ -421,9 +428,20 @@ export class AdminController {
 
   @Get('logs')
   @ApiOperation({ summary: 'Recent API audit logs (non-PII metadata)' })
-  listLogs() {
+  listLogs(@Query('source') source?: string) {
     return this.prisma.apiLog.findMany({
+      where: source ? { source } : undefined,
       take: 200,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  @Get('fonio-activity')
+  @ApiOperation({ summary: 'Recent fonio call activity with metadata for troubleshooting' })
+  listFonioActivity() {
+    return this.prisma.apiLog.findMany({
+      where: { source: 'fonio' },
+      take: 100,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -483,5 +501,55 @@ export class AdminController {
           : []),
       ],
     };
+  }
+
+  private buildListingOrder(sortBy?: string, sortDir?: 'asc' | 'desc') {
+    const dir = sortDir ?? 'asc';
+    switch (sortBy) {
+      case 'hostawayId':
+        return { hostawayId: dir };
+      case 'city':
+        return { city: dir };
+      case 'personCapacity':
+        return { personCapacity: dir };
+      case 'status':
+        return { status: dir };
+      case 'name':
+      default:
+        return { name: dir };
+    }
+  }
+
+  private buildGroupOrder(sortBy?: string, sortDir?: 'asc' | 'desc') {
+    const dir = sortDir ?? 'asc';
+    switch (sortBy) {
+      case 'hostawayParentId':
+        return { hostawayParentId: dir };
+      case 'city':
+        return { city: dir };
+      case 'name':
+      default:
+        return { name: dir };
+    }
+  }
+
+  private buildReservationOrder(sortBy?: string, sortDir?: 'asc' | 'desc') {
+    const dir = sortDir ?? 'desc';
+    switch (sortBy) {
+      case 'hostawayId':
+        return { hostawayId: dir };
+      case 'guestName':
+        return { guestName: dir };
+      case 'arrivalDate':
+        return { arrivalDate: dir };
+      case 'departureDate':
+        return { departureDate: dir };
+      case 'status':
+        return { status: dir };
+      case 'listingName':
+        return { listing: { name: dir } };
+      default:
+        return { arrivalDate: dir };
+    }
   }
 }

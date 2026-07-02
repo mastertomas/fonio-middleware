@@ -5,6 +5,7 @@ import {
   Post,
   Query,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
@@ -49,6 +50,8 @@ export class FonioController {
       metadata: {
         caller_recognized: context.caller_recognized,
         has_upcoming_booking: context.has_upcoming_booking,
+        hint_requires_verification: context.hint_requires_verification,
+        call_id: dto.callId ?? null,
       },
     });
     return context;
@@ -71,9 +74,13 @@ export class FonioController {
         checkIn: query.checkIn,
         checkOut: query.checkOut,
         guests: query.guests,
+        pets: query.pets ?? false,
         dataSource: data.meta.dataSource,
         responseMs: data.meta.responseMs,
         availableCount: data.availableCount,
+        listingNames: (data.results ?? [])
+          .slice(0, 5)
+          .map((l) => l.name),
       },
     });
     return data;
@@ -82,13 +89,48 @@ export class FonioController {
   @Post('guest/verify')
   @ApiOperation({ summary: 'Verify guest before sharing booking details' })
   async verifyGuest(@Body() dto: GuestVerifyDto) {
-    const result = await this.verification.verify(dto);
-    await this.audit.log({
-      source: 'fonio',
-      action: 'guest_verify',
-      metadata: { reservationId: dto.reservationId, verified: result.verified },
-    });
-    return result;
+    try {
+      const result = await this.verification.verify(dto);
+      await this.audit.log({
+        source: 'fonio',
+        action: 'guest_verify',
+        statusCode: 200,
+        metadata: {
+          verified: true,
+          reservationId: result.reservation.id,
+          matchedFields: result.matchedFields,
+          hadReservationId: Boolean(dto.reservationId),
+          listingNameProvided: Boolean(dto.listingName),
+        },
+      });
+      return result;
+    } catch (error) {
+      const raw =
+        error instanceof UnauthorizedException ? error.getResponse() : null;
+      const body =
+        raw && typeof raw === 'object'
+          ? (raw as Record<string, unknown>)
+          : { message: raw ?? 'Verification failed' };
+      await this.audit.log({
+        source: 'fonio',
+        action: 'guest_verify',
+        statusCode: 401,
+        metadata: {
+          verified: false,
+          message: body.message ?? 'Verification failed',
+          reservationId: dto.reservationId ?? body.reservationId ?? null,
+          matchedFields: body.matchedFields ?? [],
+          missingFields: body.missingFields ?? [],
+          requiredMinMatches: body.requiredMinMatches ?? null,
+          ambiguousCount: body.ambiguousCount ?? null,
+          hadReservationId: Boolean(dto.reservationId),
+          arrivalDate: dto.arrivalDate,
+          departureDate: dto.departureDate,
+          listingNameProvided: Boolean(dto.listingName),
+        },
+      });
+      throw error;
+    }
   }
 
   @Get('guest/reservation')
@@ -104,7 +146,11 @@ export class FonioController {
     await this.audit.log({
       source: 'fonio',
       action: 'guest_reservation',
-      metadata: { reservationId: Number(reservationId) },
+      metadata: {
+        reservationId: Number(reservationId),
+        listingName: result.listingName,
+        status: result.status,
+      },
     });
     return result;
   }
@@ -124,6 +170,17 @@ export class FonioController {
         reservationId: dto.reservationId,
         requestType: dto.requestType,
         status: result.status,
+        autoApproved: result.autoApproved,
+        forwardedToTeam: result.forwardedToTeam,
+        forwardedToHostaway: result.forwardedToHostaway,
+        inboxPending: result.inboxPending,
+        message: result.message,
+        reason: result.reason,
+        note: typeof dto.details?.note === 'string' ? dto.details.note.slice(0, 200) : null,
+        requestedTime:
+          typeof dto.details?.requestedTime === 'string'
+            ? dto.details.requestedTime
+            : null,
       },
     });
     return result;

@@ -48,6 +48,7 @@
         <button data-tab="rules" class="nav-btn" data-i18n="nav.rules">Rules</button>
         <button data-tab="requests" class="nav-btn" data-i18n="nav.requests">Guest requests</button>
         <button data-tab="logs" class="nav-btn" data-i18n="nav.logs">Audit log</button>
+        <button data-tab="fonioActivity" class="nav-btn" data-i18n="nav.fonioActivity">fonio Activity</button>
         <button data-tab="fonio" class="nav-btn" data-i18n="nav.fonio">fonio Setup</button>
         <button data-tab="users" class="nav-btn hidden" id="nav-users" data-i18n="nav.users">Users</button>
         <div class="lang-bar sidebar-lang">
@@ -236,6 +237,15 @@
         <div class="table-wrap" id="logs-table"></div>
         <div id="logs-info" class="table-info"></div>
         <div id="logs-pagination" class="table-pagination"></div>
+      </section>
+
+      <section id="tab-fonioActivity" class="tab hidden">
+        <header class="page-header"><h2 data-i18n="fonioActivity.title">fonio call activity</h2></header>
+        <p class="field-hint" data-i18n="fonioActivity.hint">Shows what fonio sent, what the middleware recorded, and the action taken. No raw phone numbers or emails.</p>
+        <div id="fonio-activity-toolbar" class="table-toolbar"></div>
+        <div class="table-wrap" id="fonio-activity-table"></div>
+        <div id="fonio-activity-info" class="table-info"></div>
+        <div id="fonio-activity-pagination" class="table-pagination"></div>
       </section>
 
       <section id="tab-fonio" class="tab hidden">
