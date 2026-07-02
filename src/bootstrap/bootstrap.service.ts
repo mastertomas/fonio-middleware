@@ -28,10 +28,10 @@ export class BootstrapService implements OnModuleInit {
       where: { email },
     });
     if (existing) {
-      if (existing.role !== AdminRole.ADMIN) {
+      if (existing.role !== AdminRole.SUPER_ADMIN) {
         await this.prisma.adminUser.update({
           where: { email },
-          data: { role: AdminRole.ADMIN },
+          data: { role: AdminRole.SUPER_ADMIN },
         });
       }
       return;
@@ -42,7 +42,7 @@ export class BootstrapService implements OnModuleInit {
       data: {
         email,
         passwordHash,
-        role: AdminRole.ADMIN,
+        role: AdminRole.SUPER_ADMIN,
       },
     });
   }

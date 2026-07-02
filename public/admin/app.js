@@ -8,6 +8,7 @@ let cachedRules = [];
 let cachedListings = [];
 let cachedConditionSchema = null;
 let editingRuleId = null;
+let editingUserId = null;
 let dashboardPoll = null;
 let syncSettingsDirty = false;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -20,6 +21,7 @@ const tableState = {
   requests: { page: 1, pageSize: 10, search: '' },
   logs: { page: 1, pageSize: 10, search: '' },
   webhooks: { page: 1, pageSize: 10, search: '' },
+  users: { page: 1, pageSize: 10, search: '' },
 };
 const searchTimers = {};
 
@@ -52,11 +54,19 @@ function logout() {
 }
 
 function canEdit() {
-  return adminRole === 'EDITOR' || adminRole === 'ADMIN';
+  return adminRole === 'EDITOR' || adminRole === 'ADMIN' || adminRole === 'SUPER_ADMIN';
 }
 
 function canAdmin() {
-  return adminRole === 'ADMIN';
+  return adminRole === 'ADMIN' || adminRole === 'SUPER_ADMIN';
+}
+
+function canSuperAdmin() {
+  return adminRole === 'SUPER_ADMIN';
+}
+
+function formatRoleLabel(role) {
+  return t(`role.${role}`) || role;
 }
 
 function applyRoleUi() {
@@ -80,12 +90,20 @@ function applyRoleUi() {
     el.toggleAttribute('disabled', readOnly);
   });
   $('#inbox-backfill-btn')?.toggleAttribute('disabled', readOnly);
+  $('#nav-users')?.classList.toggle('hidden', !canSuperAdmin());
+  if (!canSuperAdmin() && activeTab === 'users') {
+    activeTab = 'dashboard';
+    $$('.nav-btn').forEach((b) => b.classList.remove('active'));
+    $('.nav-btn[data-tab="dashboard"]')?.classList.add('active');
+    $$('.tab').forEach((tab) => tab.classList.add('hidden'));
+    $('#tab-dashboard')?.classList.remove('hidden');
+  }
 }
 
 function updateAdminSession() {
   const el = $('#admin-session');
   if (!el || !token) return;
-  const roleLabel = adminRole || t('session.roleUnknown');
+  const roleLabel = formatRoleLabel(adminRole || t('session.roleUnknown'));
   el.textContent = t('session.loggedInAs', { role: roleLabel });
 }
 
@@ -128,6 +146,7 @@ function refreshActiveTab() {
     requests: loadRequests,
     logs: loadLogs,
     fonio: loadFonio,
+    users: loadUsers,
   };
   updateRuleSelects();
   loaders[activeTab]?.();
@@ -1117,6 +1136,143 @@ async function loadLogs() {
   renderTableInfo('#logs-info', data, data.maxTotal);
   renderPagination('#logs-pagination', data, 'logs', loadLogs);
 }
+
+function resetUserForm() {
+  editingUserId = null;
+  $('#user-id').value = '';
+  $('#user-email').value = '';
+  $('#user-email').removeAttribute('readonly');
+  $('#user-password').value = '';
+  $('#user-password').required = true;
+  $('#user-role').value = 'EDITOR';
+  $('#user-active').checked = true;
+  $('#user-form-title').textContent = t('users.addUser');
+  $('#user-submit-btn').textContent = t('users.addUser');
+  $('#user-cancel-btn')?.classList.add('hidden');
+  $('#user-delete-btn')?.classList.add('hidden');
+  updateUserRowSelection(null);
+}
+
+function loadUserIntoForm(user) {
+  editingUserId = user.id;
+  $('#user-id').value = user.id;
+  $('#user-email').value = user.email;
+  $('#user-email').setAttribute('readonly', 'readonly');
+  $('#user-password').value = '';
+  $('#user-password').required = false;
+  $('#user-role').value = user.role;
+  $('#user-active').checked = user.isActive;
+  $('#user-form-title').textContent = t('users.editUser');
+  $('#user-submit-btn').textContent = t('users.save');
+  $('#user-cancel-btn')?.classList.remove('hidden');
+  $('#user-delete-btn')?.classList.toggle('hidden', !user.isActive);
+  updateUserRowSelection(user.id);
+}
+
+function updateUserRowSelection(userId) {
+  $$('#users-table tbody tr').forEach((row) => {
+    row.classList.toggle('selected', userId && row.dataset.userId === userId);
+  });
+}
+
+function bindUserRowClicks() {
+  $$('#users-table tr[data-user-id]').forEach((row) => {
+    row.addEventListener('click', () => {
+      const id = row.dataset.userId;
+      const user = cachedUsers.find((u) => u.id === id);
+      if (user) loadUserIntoForm(user);
+    });
+  });
+}
+
+let cachedUsers = [];
+
+async function loadUsers() {
+  if (!canSuperAdmin()) return;
+  const users = await api('/users');
+  cachedUsers = users;
+  ensureTableToolbar('#users-toolbar', 'users', loadUsers);
+  const data = paginateClient(users, 'users', (u) => [
+    u.email,
+    u.role,
+    u.isActive,
+    u.createdAt,
+  ].join(' '));
+  const rows = data.items.map((u) => `
+    <tr data-user-id="${u.id}">
+      <td>${esc(u.email)}</td>
+      <td>${formatRoleLabel(u.role)}</td>
+      <td>${u.isActive ? t('users.active') : t('users.inactive')}</td>
+      <td>${new Date(u.createdAt).toLocaleString(locale())}</td>
+    </tr>
+  `).join('');
+  $('#users-table').innerHTML = `
+    <table><thead><tr>
+      <th>${t('users.col.email')}</th><th>${t('users.col.role')}</th><th>${t('users.col.status')}</th><th>${t('users.col.created')}</th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="4">${t('users.none')}</td></tr>`}</tbody></table>`;
+  renderTableInfo('#users-info', data, data.maxTotal);
+  renderPagination('#users-pagination', data, 'users', loadUsers);
+  if (editingUserId) {
+    const current = users.find((u) => u.id === editingUserId);
+    if (current) loadUserIntoForm(current);
+    else resetUserForm();
+  }
+  bindUserRowClicks();
+}
+
+$('#user-new-btn')?.addEventListener('click', () => resetUserForm());
+
+$('#user-cancel-btn')?.addEventListener('click', () => resetUserForm());
+
+$('#user-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('#user-email').value.trim();
+  const password = $('#user-password').value;
+  const role = $('#user-role').value;
+  const isActive = $('#user-active').checked;
+
+  try {
+    if (editingUserId) {
+      const body = { role, isActive };
+      if (password) body.password = password;
+      await api(`/users/${editingUserId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      notify.success(t('users.saved'));
+    } else {
+      if (!password || password.length < 8) {
+        notify.error(t('users.passwordRequired'));
+        return;
+      }
+      await api('/users', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, role }),
+      });
+      notify.success(t('users.created'));
+      resetUserForm();
+    }
+    loadUsers();
+  } catch (ex) {
+    notify.error(ex.message);
+  }
+});
+
+$('#user-delete-btn')?.addEventListener('click', async () => {
+  if (!editingUserId) return;
+  const user = cachedUsers.find((u) => u.id === editingUserId);
+  if (!user) return;
+  const ok = await notify.confirm(
+    t('users.deactivateTitle'),
+    t('users.deactivateConfirm', { email: user.email }),
+  );
+  if (!ok) return;
+  try {
+    await api(`/users/${editingUserId}`, { method: 'DELETE' });
+    notify.success(t('users.deactivated'));
+    resetUserForm();
+    loadUsers();
+  } catch (ex) {
+    notify.error(ex.message);
+  }
+});
 
 async function loadFonio() {
   const data = await api('/fonio-setup');

@@ -439,6 +439,19 @@ tr:last-child td { border-bottom: none; }
   outline: 1px solid var(--primary);
 }
 
+#users-table tbody tr {
+  cursor: pointer;
+}
+
+#users-table tbody tr:hover {
+  background: var(--surface2);
+}
+
+#users-table tbody tr.selected {
+  background: var(--surface2);
+  outline: 1px solid var(--primary);
+}
+
 .url-row {
   display: flex;
   align-items: flex-start;

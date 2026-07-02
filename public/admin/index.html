@@ -49,6 +49,7 @@
         <button data-tab="requests" class="nav-btn" data-i18n="nav.requests">Guest requests</button>
         <button data-tab="logs" class="nav-btn" data-i18n="nav.logs">Audit log</button>
         <button data-tab="fonio" class="nav-btn" data-i18n="nav.fonio">fonio Setup</button>
+        <button data-tab="users" class="nav-btn hidden" id="nav-users" data-i18n="nav.users">Users</button>
         <div class="lang-bar sidebar-lang">
           <label for="lang-app" data-i18n="lang.label">Language</label>
           <select id="lang-app" class="lang-select" aria-label="Language">
@@ -240,6 +241,54 @@
       <section id="tab-fonio" class="tab hidden">
         <header class="page-header"><h2 data-i18n="fonio.title">fonio.ai integration</h2></header>
         <div class="card" id="fonio-setup"></div>
+      </section>
+
+      <section id="tab-users" class="tab hidden">
+        <header class="page-header">
+          <h2 data-i18n="users.title">Admin users</h2>
+          <button type="button" id="user-new-btn" class="btn primary" data-i18n="users.addUser">Add user</button>
+        </header>
+        <p class="field-hint" data-i18n="users.hint">Manage admin accounts and roles. Only super admins can access this page.</p>
+        <div class="card" id="user-form-card">
+          <h3 id="user-form-title" data-i18n="users.addUser">Add user</h3>
+          <form id="user-form" class="rule-form-grid">
+            <input type="hidden" id="user-id" />
+            <label>
+              <span data-i18n="users.email">Email</span>
+              <input type="email" id="user-email" required autocomplete="off" />
+            </label>
+            <label>
+              <span data-i18n="users.password">Password</span>
+              <input type="password" id="user-password" minlength="8" autocomplete="new-password" />
+              <span class="field-hint" id="user-password-hint" data-i18n="users.passwordHint">Min. 8 characters. Leave blank when editing to keep current password.</span>
+            </label>
+            <label>
+              <span data-i18n="users.role">Role</span>
+              <select id="user-role" required>
+                <option value="VIEWER">VIEWER</option>
+                <option value="EDITOR">EDITOR</option>
+                <option value="ADMIN">ADMIN</option>
+                <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+              </select>
+            </label>
+            <label class="checkbox-row rule-active-row">
+              <input type="checkbox" id="user-active" checked />
+              <span data-i18n="users.active">Account active</span>
+            </label>
+            <div class="form-actions">
+              <span class="field-label" aria-hidden="true">&nbsp;</span>
+              <div class="form-action-btns">
+                <button type="submit" id="user-submit-btn" class="btn primary" data-i18n="users.save">Save</button>
+                <button type="button" id="user-cancel-btn" class="btn ghost hidden" data-i18n="users.cancel">Cancel</button>
+                <button type="button" id="user-delete-btn" class="btn ghost hidden" data-i18n="users.deactivate">Deactivate</button>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div id="users-toolbar" class="table-toolbar"></div>
+        <div class="table-wrap" id="users-table"></div>
+        <div id="users-info" class="table-info"></div>
+        <div id="users-pagination" class="table-pagination"></div>
       </section>
     </main>
   </div>

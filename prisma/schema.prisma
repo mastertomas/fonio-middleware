@@ -49,6 +49,7 @@ enum AdminRole {
   VIEWER
   EDITOR
   ADMIN
+  SUPER_ADMIN
 }
 
 enum LogLevel {

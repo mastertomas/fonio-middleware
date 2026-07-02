@@ -8,6 +8,8 @@ import { RulesModule } from '../rules/rules.module';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminController } from './admin.controller';
+import { AdminUsersController } from './admin-users.controller';
+import { AdminUsersService } from './admin-users.service';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { JwtStrategy } from './jwt.strategy';
 
@@ -26,7 +28,7 @@ import { JwtStrategy } from './jwt.strategy';
       }),
     }),
   ],
-  controllers: [AdminAuthController, AdminController],
-  providers: [AdminAuthService, JwtStrategy, RolesGuard],
+  controllers: [AdminAuthController, AdminController, AdminUsersController],
+  providers: [AdminAuthService, AdminUsersService, JwtStrategy, RolesGuard],
 })
 export class AdminModule {}
