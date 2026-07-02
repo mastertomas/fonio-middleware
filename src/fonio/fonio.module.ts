@@ -33,6 +33,6 @@ import { FonioVerificationService } from './fonio-verification.service';
     FonioRequestsService,
     FonioBookingOfferService,
   ],
-  exports: [FonioCallContextService],
+  exports: [FonioCallContextService, FonioVerificationService],
 })
 export class FonioModule {}

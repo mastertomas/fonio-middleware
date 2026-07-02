@@ -28,6 +28,9 @@ export class FonioCallContextService {
         'Guten Tag, Sie erreichen brainions Vermietung. Wie kann ich Ihnen helfen?',
       hint_requires_verification: true,
       verification_hint_de: requirements.hintDe,
+      verification_guest_script_de: requirements.guestScriptDe,
+      verification_instructions_de: requirements.verificationInstructionsDe,
+      verification_optional_fields_de: requirements.optionalFieldsListDe,
       verification_min_match_count: requirements.minMatchCount,
       booking_offer_enabled: requirements.bookingOfferEnabled,
     };

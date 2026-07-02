@@ -1064,6 +1064,7 @@ function renderVerificationForm(config, fieldMeta) {
   $('#verification-min-match').max = VERIFICATION_FIELDS.length;
   const offerCb = $('#verification-booking-offer');
   if (offerCb) offerCb.checked = config?.bookingOfferEnabled !== false;
+  renderVerificationPromptPreview(config?.fonioPrompt);
 
   container.innerHTML = VERIFICATION_FIELDS.map((field) => {
     const locked = field === 'stayDates';
@@ -1080,6 +1081,20 @@ function renderVerificationForm(config, fieldMeta) {
         </span>
       </label>`;
   }).join('');
+}
+
+function renderVerificationPromptPreview(prompt) {
+  const box = $('#verification-prompt-preview');
+  const script = $('#verification-guest-script');
+  const block = $('#verification-instructions-block');
+  if (!box || !script || !block) return;
+  if (!prompt?.guestScriptDe) {
+    box.classList.add('hidden');
+    return;
+  }
+  box.classList.remove('hidden');
+  script.value = prompt.guestScriptDe;
+  block.value = prompt.verificationInstructionsDe ?? '';
 }
 
 function getVerificationFormData() {

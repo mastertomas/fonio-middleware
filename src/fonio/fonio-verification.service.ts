@@ -34,6 +34,18 @@ const FIELD_LABELS_DE: Record<VerificationField, string> = {
   reservationId: 'Reservierungsnummer',
 };
 
+function joinLabelsDe(labels: string[]): string {
+  if (labels.length === 0) return '';
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} oder ${labels[1]}`;
+  return `${labels.slice(0, -1).join(', ')} oder ${labels[labels.length - 1]}`;
+}
+
+function minMatchLabelDe(count: number): string {
+  if (count === 1) return 'mindestens eine Angabe';
+  return `mindestens ${count} Angaben`;
+}
+
 @Injectable()
 export class FonioVerificationService {
   constructor(
@@ -53,16 +65,31 @@ export class FonioVerificationService {
       scoringFields.length,
     );
     const optionalFields = scoringFields.filter((f) => f !== 'stayDates');
+    const optionalFieldLabelsDe = optionalFields.map((f) => FIELD_LABELS_DE[f]);
+    const optionalFieldsListDe = joinLabelsDe(optionalFieldLabelsDe);
+    const hintDe = this.buildHintDe(minMatch, optionalFields);
+    const guestScriptDe = this.buildGuestScriptDe(minMatch, optionalFieldLabelsDe);
+    const verificationInstructionsDe = this.buildVerificationInstructionsDe({
+      minMatch,
+      optionalFieldsListDe,
+      hintDe,
+      guestScriptDe,
+      bookingOfferEnabled: config?.bookingOfferEnabled ?? true,
+    });
 
     return {
       alwaysRequired: ['stayDates'],
       optionalFields,
+      optionalFieldLabelsDe,
+      optionalFieldsListDe,
       minMatchCount: minMatch,
       bookingOfferEnabled: config?.bookingOfferEnabled ?? true,
-      hintDe: this.buildHintDe(minMatch, optionalFields),
+      hintDe,
+      guestScriptDe,
+      verificationInstructionsDe,
       hintEn:
         'Arrival and departure dates are always required. Additionally provide at least ' +
-        `${minMatch} matching details from: property name, phone, email, or reservation number. ` +
+        `${minMatch} matching details from: ${optionalFieldsListDe || 'configured fields'}. ` +
         'The guest does not need to provide all of these — only enough to confirm the booking.',
     };
   }
@@ -205,11 +232,54 @@ export class FonioVerificationService {
     optionalFields: VerificationField[],
   ): string {
     const labels = optionalFields.map((f) => FIELD_LABELS_DE[f]);
+    if (labels.length === 0) {
+      return 'Anreise- und Abreisedatum sind immer erforderlich.';
+    }
     return (
-      'Anreise- und Abreisedatum sind immer erforderlich. Zusätzlich mindestens ' +
-      `${minMatch} übereinstimmende Angabe(n) aus: ${labels.join(', ')}. ` +
+      'Anreise- und Abreisedatum sind immer erforderlich. Zusätzlich ' +
+      `${minMatchLabelDe(minMatch)} aus: ${joinLabelsDe(labels)}. ` +
       'Der Gast muss nicht alles nennen — nur genug zur Bestätigung der Buchung.'
     );
+  }
+
+  private buildGuestScriptDe(
+    minMatch: number,
+    optionalLabels: string[],
+  ): string {
+    if (optionalLabels.length === 0) {
+      return 'Zur Bestätigung brauche ich bitte Ihr An- und Abreisedatum.';
+    }
+    return (
+      'Zur Bestätigung brauche ich zuerst Ihr An- und Abreisedatum. Danach reichen ' +
+      `${minMatchLabelDe(minMatch)} — zum Beispiel ${joinLabelsDe(optionalLabels)}. ` +
+      'Sie müssen nicht alles nennen.'
+    );
+  }
+
+  private buildVerificationInstructionsDe(params: {
+    minMatch: number;
+    optionalFieldsListDe: string;
+    hintDe: string;
+    guestScriptDe: string;
+    bookingOfferEnabled: boolean;
+  }): string {
+    const bookingOfferLine = params.bookingOfferEnabled
+      ? '- Automatisches Buchungsangebot ist aktiv (booking-offer API).'
+      : '- Automatisches Buchungsangebot ist deaktiviert — nur Verfügbarkeit prüfen, kein booking-offer.';
+
+    return [
+      '# Verifizierung bestehender Buchung (aus Admin-Einstellungen, live)',
+      `Regel: ${params.hintDe}`,
+      `Sage dem Gast in etwa: „${params.guestScriptDe}"`,
+      `- Mindestanzahl übereinstimmender Angaben (ohne Daten): ${params.minMatch}`,
+      params.optionalFieldsListDe
+        ? `- Erlaubte Zusatzangaben (Either/Or): ${params.optionalFieldsListDe}`
+        : '- Keine weiteren Zusatzfelder in Admin aktiviert — nur An- und Abreisedatum.',
+      '- Frage NICHT der Reihe nach nach allen Feldern. Sammle, was der Gast nennt, dann Tool „Gast verifizieren“.',
+      '- Bei Fehlschlag: „hint“ aus der API lesen und nur fehlende Angaben nachfragen.',
+      '- Erkannter Anrufer oder Vorname allein reichen NICHT.',
+      bookingOfferLine,
+    ].join('\n');
   }
 
   private assertStayDatesProvided(dto: GuestVerifyDto) {

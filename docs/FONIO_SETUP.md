@@ -54,6 +54,12 @@ After inbound webhook, fonio receives:
 | `guest_first_name_hint` | First name for greeting only (not verification) |
 | `greeting_hint` | Ready-to-use German greeting |
 | `hint_requires_verification` | Must verify before sharing booking details |
+| `verification_hint_de` | German rule text (min match + enabled fields from Admin) |
+| `verification_guest_script_de` | Short either/or sentence to say to the guest |
+| `verification_instructions_de` | Full verification block for „Eigene Anweisungen“ |
+| `verification_optional_fields_de` | Comma/or-list of enabled optional fields |
+| `verification_min_match_count` | Minimum matching fields from Admin |
+| `booking_offer_enabled` | Whether booking-offer API is active |
 
 **Note:** The webhook does **not** return reservation ID or city before verification. fonio must call `guest/verify` first.
 

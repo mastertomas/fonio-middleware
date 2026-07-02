@@ -162,6 +162,16 @@
               <button type="submit" class="btn primary" data-i18n="verification.save">Save verification settings</button>
             </div>
           </form>
+          <div id="verification-prompt-preview" class="verification-prompt-preview hidden">
+            <h4 data-i18n="verification.promptPreview">fonio prompt preview (from current admin settings)</h4>
+            <p class="field-hint" data-i18n="verification.promptPreviewHint">Paste {{verification_instructions_de}} into fonio „Eigene Anweisungen“, or use the guest script variable in the system prompt.</p>
+            <label><span data-i18n="verification.guestScript">What to say to the guest</span>
+              <textarea id="verification-guest-script" rows="3" readonly></textarea>
+            </label>
+            <label><span data-i18n="verification.fullInstructions">Full verification block for fonio</span>
+              <textarea id="verification-instructions-block" rows="8" readonly></textarea>
+            </label>
+          </div>
         </div>
 
         <h3 class="section-subtitle" data-i18n="rules.approvalTitle">Approval rules (after verification)</h3>

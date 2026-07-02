@@ -55,6 +55,7 @@ export class AdminController {
     private readonly sync: HostawaySyncService,
     private readonly syncSettings: SyncSettingsService,
     private readonly fonioSetup: FonioCallContextService,
+    private readonly verification: FonioVerificationService,
     private readonly hostaway: HostawayClient,
     private readonly config: ConfigService,
     private readonly rules: RulesService,
@@ -344,10 +345,23 @@ export class AdminController {
 
   @Get('verification-config')
   @ApiOperation({ summary: 'Get default guest verification config (fonio)' })
-  getVerificationConfig() {
-    return this.prisma.verificationConfig.findFirst({
-      where: { isDefault: true },
-    });
+  async getVerificationConfig() {
+    const [config, prompt] = await Promise.all([
+      this.prisma.verificationConfig.findFirst({ where: { isDefault: true } }),
+      this.verification.getRequirements(),
+    ]);
+    if (!config) return null;
+    return {
+      ...config,
+      fonioPrompt: {
+        hintDe: prompt.hintDe,
+        guestScriptDe: prompt.guestScriptDe,
+        verificationInstructionsDe: prompt.verificationInstructionsDe,
+        optionalFieldsListDe: prompt.optionalFieldsListDe,
+        minMatchCount: prompt.minMatchCount,
+        bookingOfferEnabled: prompt.bookingOfferEnabled,
+      },
+    };
   }
 
   @Get('verification-config/fields')
