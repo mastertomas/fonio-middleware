@@ -163,19 +163,28 @@
             </div>
           </form>
           <div id="verification-prompt-preview" class="verification-prompt-preview hidden">
-            <h4 data-i18n="verification.promptPreview">fonio prompt preview (from current admin settings)</h4>
-            <p class="field-hint" data-i18n="verification.promptPreviewHint">Use webhook variable {{verification_instructions_de}} in fonio — it updates automatically when you save here.</p>
+            <h4 data-i18n="verification.promptPreview">Preview: what guests hear on the phone</h4>
+            <p class="field-hint" data-i18n="verification.promptPreviewHint">This text is spoken by your AI phone assistant when verifying a caller. It updates automatically when you save the settings above.</p>
             <div class="prompt-preview-field">
-              <span class="field-label" data-i18n="verification.guestScript">What to say to the guest ({{verification_guest_script_de}})</span>
+              <span class="field-label" data-i18n="verification.guestScript">Spoken introduction for guests</span>
               <div class="prompt-oneline-row">
                 <input type="text" id="verification-guest-script" class="prompt-oneline" readonly />
                 <button type="button" class="btn copy btn-sm" id="verification-copy-script" data-i18n="common.copy">Copy</button>
               </div>
             </div>
             <details class="prompt-preview-details">
-              <summary data-i18n="verification.fullInstructions">Full verification block ({{verification_instructions_de}})</summary>
+              <summary data-i18n="verification.fullInstructions">Full verification instructions (detailed)</summary>
               <textarea id="verification-instructions-block" rows="10" readonly></textarea>
               <button type="button" class="btn copy btn-sm" id="verification-copy-block" data-i18n="common.copy">Copy</button>
+            </details>
+            <details class="prompt-preview-details prompt-tech-details">
+              <summary data-i18n="verification.techSetup">Technical setup (for your IT team)</summary>
+              <p class="field-hint" data-i18n="verification.techSetupHint">In fonio, use these webhook variables so the assistant always uses your latest settings:</p>
+              <ul class="tech-var-list">
+                <li><code>{{verification_guest_script_de}}</code> — <span data-i18n="verification.techVarScript">spoken guest script</span></li>
+                <li><code>{{verification_instructions_de}}</code> — <span data-i18n="verification.techVarInstructions">full verification block</span></li>
+                <li><code>{{verification_hint_de}}</code> — <span data-i18n="verification.techVarHint">short hint after failed verification</span></li>
+              </ul>
             </details>
           </div>
         </div>
@@ -258,31 +267,61 @@
         <p class="field-hint" data-i18n="logs.hint">Technical API events (fonio calls, admin actions, webhooks). Sensitive fields are masked; IPs are hashed. Full call transcripts remain in fonio.</p>
         <div class="card" id="log-settings-card">
           <h3 data-i18n="logs.retentionTitle">Log retention (GDPR)</h3>
-          <p class="field-hint" data-i18n="logs.retentionHint">Automatic deletion of expired log entries. PII-related metadata uses the shorter retention period.</p>
+          <p class="field-hint" data-i18n="logs.retentionHint">Expired log entries are permanently removed from the database (not archived). Personal data in logs is masked; phone numbers and emails are never stored in plain text.</p>
           <form id="log-settings-form" class="log-settings-form">
-            <label>
-              <span data-i18n="logs.debugDays">Debug logs (days)</span>
-              <input type="number" id="log-debug-days" min="7" max="14" value="14" />
-              <span class="field-hint" data-i18n="logs.debugDaysHint">7–14 days</span>
-            </label>
-            <label>
-              <span data-i18n="logs.operationalDays">Operational / security (days)</span>
-              <input type="number" id="log-operational-days" min="1" max="90" value="30" />
-            </label>
-            <label>
-              <span data-i18n="logs.piiDays">PII metadata max (days)</span>
-              <input type="number" id="log-pii-days" min="1" max="30" value="30" />
-            </label>
-            <label>
-              <span data-i18n="logs.maxDays">Maximum cap (days)</span>
-              <input type="number" id="log-max-days" min="30" max="90" value="90" />
-              <span class="field-hint" data-i18n="logs.maxDaysHint">30–90 days</span>
-            </label>
+            <div class="log-retention-option">
+              <label class="checkbox-row log-retention-toggle">
+                <input type="checkbox" id="log-debug-enabled" checked />
+                <span data-i18n="logs.debugEnabled">Delete development / debug logs automatically</span>
+              </label>
+              <label>
+                <span data-i18n="logs.debugDays">Keep for (days)</span>
+                <input type="number" id="log-debug-days" min="7" max="14" value="14" />
+                <span class="field-hint" data-i18n="logs.debugDaysHint">7–14 days</span>
+              </label>
+            </div>
+            <div class="log-retention-option">
+              <label class="checkbox-row log-retention-toggle">
+                <input type="checkbox" id="log-operational-enabled" checked />
+                <span data-i18n="logs.operationalEnabled">Delete operational / security logs automatically</span>
+              </label>
+              <label>
+                <span data-i18n="logs.operationalDays">Keep for (days)</span>
+                <input type="number" id="log-operational-days" min="1" max="90" value="30" />
+              </label>
+            </div>
+            <div class="log-retention-option">
+              <label class="checkbox-row log-retention-toggle">
+                <input type="checkbox" id="log-pii-enabled" checked />
+                <span data-i18n="logs.piiEnabled">Delete logs with personal data sooner (GDPR)</span>
+              </label>
+              <label>
+                <span data-i18n="logs.piiDays">Keep for (days)</span>
+                <input type="number" id="log-pii-days" min="1" max="30" value="30" />
+              </label>
+            </div>
+            <div class="log-retention-option">
+              <label class="checkbox-row log-retention-toggle">
+                <input type="checkbox" id="log-auto-purge-enabled" checked />
+                <span data-i18n="logs.autoPurgeEnabled">Run automatic cleanup every night (3:00 AM)</span>
+              </label>
+              <label>
+                <span data-i18n="logs.maxDays">Maximum storage cap (days)</span>
+                <input type="number" id="log-max-days" min="30" max="90" value="90" />
+                <span class="field-hint" data-i18n="logs.maxDaysHint">30–90 days — nothing is kept longer than this</span>
+              </label>
+            </div>
             <div class="form-actions" style="grid-column: 1 / -1;">
               <button type="submit" class="btn primary" data-i18n="logs.retentionSave">Save retention settings</button>
             </div>
           </form>
           <p id="log-settings-readonly-hint" class="field-hint hidden" data-i18n="logs.retentionReadonly">Only EDITOR or ADMIN can change log retention.</p>
+          <div id="log-retention-status" class="log-retention-status hidden">
+            <h4 data-i18n="logs.statusTitle">Retention status</h4>
+            <ul id="log-retention-status-list" class="retention-status-list"></ul>
+            <div id="log-retention-samples"></div>
+            <button type="button" id="log-purge-now-btn" class="btn ghost btn-sm" data-i18n="logs.purgeNow">Delete expired logs now</button>
+          </div>
         </div>
         <div id="logs-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="logs-table"></div>

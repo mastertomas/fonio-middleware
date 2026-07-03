@@ -251,5 +251,9 @@ model LogSettings {
   operationalRetentionDays Int      @default(30)
   piiRetentionDays         Int      @default(30)
   maxRetentionDays         Int      @default(90)
+  debugAutoDelete          Boolean  @default(true)
+  operationalAutoDelete    Boolean  @default(true)
+  piiAutoDelete            Boolean  @default(true)
+  autoPurgeEnabled         Boolean  @default(true)
   updatedAt                DateTime @updatedAt
 }

@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class UpdateLogSettingsDto {
   @IsOptional()
@@ -24,4 +24,20 @@ export class UpdateLogSettingsDto {
   @Min(30)
   @Max(90)
   maxRetentionDays?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  debugAutoDelete?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  operationalAutoDelete?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  piiAutoDelete?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  autoPurgeEnabled?: boolean;
 }

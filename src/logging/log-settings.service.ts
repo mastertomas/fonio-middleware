@@ -3,11 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { LogLevel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
+export type LogRetentionRule = 'debug' | 'pii' | 'operational' | 'max_cap';
+
 export interface ResolvedLogRetention {
   debugRetentionDays: number;
   operationalRetentionDays: number;
   piiRetentionDays: number;
   maxRetentionDays: number;
+  debugAutoDelete: boolean;
+  operationalAutoDelete: boolean;
+  piiAutoDelete: boolean;
+  autoPurgeEnabled: boolean;
 }
 
 @Injectable()
@@ -46,6 +52,10 @@ export class LogSettingsService {
           30,
           90,
         ),
+        debugAutoDelete: true,
+        operationalAutoDelete: true,
+        piiAutoDelete: true,
+        autoPurgeEnabled: true,
       },
     });
   }
@@ -64,6 +74,10 @@ export class LogSettingsService {
         maxRetentionDays,
       ),
       maxRetentionDays,
+      debugAutoDelete: settings.debugAutoDelete,
+      operationalAutoDelete: settings.operationalAutoDelete,
+      piiAutoDelete: settings.piiAutoDelete,
+      autoPurgeEnabled: settings.autoPurgeEnabled,
     };
   }
 
@@ -72,6 +86,10 @@ export class LogSettingsService {
     operationalRetentionDays?: number;
     piiRetentionDays?: number;
     maxRetentionDays?: number;
+    debugAutoDelete?: boolean;
+    operationalAutoDelete?: boolean;
+    piiAutoDelete?: boolean;
+    autoPurgeEnabled?: boolean;
   }) {
     await this.getOrCreate();
     const current = await this.getResolved();
@@ -105,6 +123,11 @@ export class LogSettingsService {
         operationalRetentionDays,
         piiRetentionDays,
         maxRetentionDays,
+        debugAutoDelete: data.debugAutoDelete ?? current.debugAutoDelete,
+        operationalAutoDelete:
+          data.operationalAutoDelete ?? current.operationalAutoDelete,
+        piiAutoDelete: data.piiAutoDelete ?? current.piiAutoDelete,
+        autoPurgeEnabled: data.autoPurgeEnabled ?? current.autoPurgeEnabled,
       },
     });
   }
@@ -114,9 +137,91 @@ export class LogSettingsService {
     hasPii: boolean,
   ): Promise<number> {
     const settings = await this.getResolved();
-    if (level === LogLevel.DEBUG) return settings.debugRetentionDays;
-    if (hasPii) return settings.piiRetentionDays;
-    return settings.operationalRetentionDays;
+    if (level === LogLevel.DEBUG) {
+      return settings.debugAutoDelete
+        ? settings.debugRetentionDays
+        : settings.maxRetentionDays;
+    }
+    if (hasPii) {
+      return settings.piiAutoDelete
+        ? settings.piiRetentionDays
+        : settings.maxRetentionDays;
+    }
+    return settings.operationalAutoDelete
+      ? settings.operationalRetentionDays
+      : settings.maxRetentionDays;
+  }
+
+  async getStatus(
+    containsPii: (metadata: Record<string, unknown>) => boolean,
+  ) {
+    const settings = await this.getResolved();
+    const now = new Date();
+    const [total, expired] = await Promise.all([
+      this.prisma.apiLog.count(),
+      this.prisma.apiLog.count({
+        where: { expiresAt: { lt: now } },
+      }),
+    ]);
+    const recent = await this.prisma.apiLog.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        source: true,
+        action: true,
+        level: true,
+        metadata: true,
+        createdAt: true,
+        expiresAt: true,
+      },
+    });
+
+    const samples = recent.map((log) => {
+      const meta =
+        log.metadata &&
+        typeof log.metadata === 'object' &&
+        !Array.isArray(log.metadata)
+          ? (log.metadata as Record<string, unknown>)
+          : {};
+      let rule: LogRetentionRule = 'operational';
+      if (log.level === LogLevel.DEBUG && settings.debugAutoDelete) {
+        rule = 'debug';
+      } else if (containsPii(meta) && settings.piiAutoDelete) {
+        rule = 'pii';
+      } else if (!settings.operationalAutoDelete) {
+        rule = 'max_cap';
+      }
+      return {
+        source: log.source,
+        action: log.action,
+        createdAt: log.createdAt,
+        expiresAt: log.expiresAt,
+        retentionRule: rule,
+      };
+    });
+
+    return {
+      settings,
+      totalLogs: total,
+      expiredLogs: expired,
+      permanentDeletion: true,
+      nextPurgeAt: this.nextPurgeAt(),
+      samples,
+    };
+  }
+
+  isAutoPurgeEnabled(): Promise<boolean> {
+    return this.getResolved().then((s) => s.autoPurgeEnabled);
+  }
+
+  private nextPurgeAt(): string {
+    const next = new Date();
+    next.setHours(3, 0, 0, 0);
+    if (next.getTime() <= Date.now()) {
+      next.setDate(next.getDate() + 1);
+    }
+    return next.toISOString();
   }
 
   private clamp(value: number, min: number, max: number): number {

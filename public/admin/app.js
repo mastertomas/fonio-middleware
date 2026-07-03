@@ -106,6 +106,7 @@ function applyRoleUi() {
   $('#log-settings-form')?.querySelectorAll('input, button').forEach((el) => {
     el.toggleAttribute('disabled', readOnly);
   });
+  $('#log-purge-now-btn')?.toggleAttribute('disabled', readOnly);
   $('#log-settings-readonly-hint')?.classList.toggle('hidden', canEdit());
   updateAdminSession();
   $('#rule-form')?.querySelectorAll('input, select, button').forEach((el) => {
@@ -1271,8 +1272,75 @@ async function loadLogSettings() {
     $('#log-operational-days').value = settings.operationalRetentionDays ?? 30;
     $('#log-pii-days').value = settings.piiRetentionDays ?? 30;
     $('#log-max-days').value = settings.maxRetentionDays ?? 90;
+    $('#log-debug-enabled').checked = settings.debugAutoDelete !== false;
+    $('#log-operational-enabled').checked = settings.operationalAutoDelete !== false;
+    $('#log-pii-enabled').checked = settings.piiAutoDelete !== false;
+    $('#log-auto-purge-enabled').checked = settings.autoPurgeEnabled !== false;
+    syncLogRetentionInputs();
+    await loadLogRetentionStatus();
   } catch {
     /* keep defaults */
+  }
+}
+
+function syncLogRetentionInputs() {
+  const pairs = [
+    ['#log-debug-enabled', '#log-debug-days'],
+    ['#log-operational-enabled', '#log-operational-days'],
+    ['#log-pii-enabled', '#log-pii-days'],
+  ];
+  pairs.forEach(([cbSel, inputSel]) => {
+    const cb = $(cbSel);
+    const input = $(inputSel);
+    if (!cb || !input) return;
+    input.toggleAttribute('disabled', !cb.checked || !canEdit());
+  });
+}
+
+['#log-debug-enabled', '#log-operational-enabled', '#log-pii-enabled'].forEach((sel) => {
+  $(sel)?.addEventListener('change', syncLogRetentionInputs);
+});
+
+async function loadLogRetentionStatus() {
+  const box = $('#log-retention-status');
+  const list = $('#log-retention-status-list');
+  const samplesEl = $('#log-retention-samples');
+  if (!box || !list) return;
+  try {
+    const status = await api('/log-settings/status');
+    box.classList.remove('hidden');
+    const purgeOn = status.settings?.autoPurgeEnabled !== false;
+    list.innerHTML = `
+      <li>${t('logs.statusStored', { count: status.totalLogs ?? 0 })}</li>
+      <li>${t('logs.statusExpired', { count: status.expiredLogs ?? 0 })}</li>
+      <li>${purgeOn ? t('logs.statusPurgeOn', { when: formatDateTime(status.nextPurgeAt) }) : t('logs.statusPurgeOff')}</li>
+      <li>${t('logs.statusPermanent')}</li>
+    `;
+    if (samplesEl && status.samples?.length) {
+      const rows = status.samples.map((s) => `
+        <tr>
+          <td>${formatDateTime(s.createdAt)}</td>
+          <td>${esc(s.source)} / <code>${esc(s.action)}</code></td>
+          <td>${t(`logs.rule.${s.retentionRule}`)}</td>
+          <td>${formatDateTime(s.expiresAt)}</td>
+        </tr>
+      `).join('');
+      samplesEl.innerHTML = `
+        <p class="field-hint">${t('logs.statusSamplesHint')}</p>
+        <table class="meta-kv-table retention-samples-table">
+          <thead><tr>
+            <th>${t('logs.time')}</th>
+            <th>${t('logs.source')}</th>
+            <th>${t('logs.retentionRule')}</th>
+            <th>${t('logs.deletesOn')}</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    } else if (samplesEl) {
+      samplesEl.innerHTML = '';
+    }
+  } catch {
+    box.classList.add('hidden');
   }
 }
 
@@ -1286,10 +1354,26 @@ $('#log-settings-form')?.addEventListener('submit', async (e) => {
         operationalRetentionDays: Number($('#log-operational-days').value),
         piiRetentionDays: Number($('#log-pii-days').value),
         maxRetentionDays: Number($('#log-max-days').value),
+        debugAutoDelete: $('#log-debug-enabled').checked,
+        operationalAutoDelete: $('#log-operational-enabled').checked,
+        piiAutoDelete: $('#log-pii-enabled').checked,
+        autoPurgeEnabled: $('#log-auto-purge-enabled').checked,
       }),
     });
     notify.success(t('logs.retentionSaved'));
-    loadLogSettings();
+    await loadLogSettings();
+  } catch (ex) {
+    notify.error(ex.message);
+  }
+});
+
+$('#log-purge-now-btn')?.addEventListener('click', async () => {
+  if (!canEdit()) return;
+  try {
+    const result = await api('/log-settings/purge-expired', { method: 'POST' });
+    notify.success(t('logs.purgeDone', { count: result.deleted ?? 0 }));
+    await loadLogRetentionStatus();
+    await loadLogs();
   } catch (ex) {
     notify.error(ex.message);
   }

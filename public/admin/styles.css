@@ -163,6 +163,55 @@ body {
   margin-bottom: 0.25rem;
 }
 
+.log-retention-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.log-retention-toggle {
+  margin-bottom: 0;
+}
+
+.log-retention-status {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.retention-status-list {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.25rem;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.retention-status-list li {
+  margin-bottom: 0.35rem;
+}
+
+.retention-samples-table {
+  margin-bottom: 0.75rem;
+}
+
+.tech-var-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.88rem;
+}
+
+.tech-var-list code {
+  font-size: 0.82rem;
+}
+
+.prompt-tech-details {
+  margin-top: 0.75rem;
+}
+
 .checkbox-row {
   display: flex;
   align-items: center;

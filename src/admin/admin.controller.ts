@@ -34,6 +34,7 @@ import { GuestRequestInboxService } from '../hostaway/guest-request-inbox.servic
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { SyncSettingsService } from '../hostaway/sync-settings.service';
 import { LogSettingsService } from '../logging/log-settings.service';
+import { AuditLogService } from '../logging/audit-log.service';
 import { getConditionFieldSchema } from '../rules/approval-conditions';
 import { RulesService } from '../rules/rules.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -64,6 +65,7 @@ export class AdminController {
     private readonly conversations: HostawayConversationService,
     private readonly guestInbox: GuestRequestInboxService,
     private readonly logSettings: LogSettingsService,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   @Get('listings')
@@ -457,6 +459,24 @@ export class AdminController {
   @ApiOperation({ summary: 'Update GDPR log retention settings' })
   updateLogSettings(@Body() dto: UpdateLogSettingsDto) {
     return this.logSettings.update(dto);
+  }
+
+  @Get('log-settings/status')
+  @ApiOperation({ summary: 'Log retention status and sample expiry dates' })
+  getLogSettingsStatus() {
+    return this.logSettings.getStatus((meta) =>
+      this.auditLog.containsPii(meta),
+    );
+  }
+
+  @Post('log-settings/purge-expired')
+  @Roles(AdminRole.EDITOR, AdminRole.ADMIN)
+  @ApiOperation({
+    summary: 'Permanently delete expired log rows from the database',
+  })
+  async purgeExpiredLogs() {
+    const deleted = await this.auditLog.purgeExpired();
+    return { deleted, permanent: true };
   }
 
   @Get('logs')
