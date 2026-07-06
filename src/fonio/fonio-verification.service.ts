@@ -42,8 +42,12 @@ function joinLabelsDe(labels: string[]): string {
 }
 
 function minMatchLabelDe(count: number): string {
-  if (count === 1) return 'mindestens eine Angabe';
-  return `mindestens ${count} Angaben`;
+  if (count === 1) return 'mindestens eine weitere Angabe';
+  return `mindestens ${count} weitere Angaben`;
+}
+
+function additionalMinMatch(totalMinMatch: number): number {
+  return Math.max(0, totalMinMatch - 1);
 }
 
 @Injectable()
@@ -67,10 +71,15 @@ export class FonioVerificationService {
     const optionalFields = scoringFields.filter((f) => f !== 'stayDates');
     const optionalFieldLabelsDe = optionalFields.map((f) => FIELD_LABELS_DE[f]);
     const optionalFieldsListDe = joinLabelsDe(optionalFieldLabelsDe);
+    const additionalMinMatchCount = additionalMinMatch(minMatch);
     const hintDe = this.buildHintDe(minMatch, optionalFields);
-    const guestScriptDe = this.buildGuestScriptDe(minMatch, optionalFieldLabelsDe);
+    const guestScriptDe = this.buildGuestScriptDe(
+      additionalMinMatchCount,
+      optionalFieldLabelsDe,
+    );
     const verificationInstructionsDe = this.buildVerificationInstructionsDe({
       minMatch,
+      additionalMinMatchCount,
       optionalFieldsListDe,
       hintDe,
       guestScriptDe,
@@ -83,14 +92,18 @@ export class FonioVerificationService {
       optionalFieldLabelsDe,
       optionalFieldsListDe,
       minMatchCount: minMatch,
+      additionalMinMatchCount,
       bookingOfferEnabled: config?.bookingOfferEnabled ?? true,
       hintDe,
       guestScriptDe,
       verificationInstructionsDe,
       hintEn:
-        'Arrival and departure dates are always required. Additionally provide at least ' +
-        `${minMatch} matching details from: ${optionalFieldsListDe || 'configured fields'}. ` +
-        'The guest does not need to provide all of these — only enough to confirm the booking.',
+        'Arrival and departure dates always count as one match. Provide at least ' +
+        `${additionalMinMatchCount} more matching detail(s) from: ${optionalFieldsListDe || 'configured fields'} ` +
+        `(${minMatch} total matches required). The guest does not need to provide all fields.`,
+      postVerifyHintDe:
+        'Nach erfolgreicher Verifizierung: verificationToken für Buchung abrufen und Gästeanfrage verwenden. ' +
+        'Nicht erneut nach Name fragen — Name steht in der Buchung (guestNameHint).',
     };
   }
 
@@ -119,7 +132,7 @@ export class FonioVerificationService {
       scoringFields.length,
     );
 
-    const checks: string[] = [];
+    const checks: VerificationField[] = [];
     let matches = 0;
 
     for (const field of scoringFields) {
@@ -132,14 +145,22 @@ export class FonioVerificationService {
 
     if (matches < minMatch) {
       const missing = scoringFields.filter((f) => !checks.includes(f));
+      const failure = this.buildVerifyFailureDetails(
+        checks,
+        missing,
+        minMatch,
+        matches,
+      );
       throw new UnauthorizedException({
         verified: false,
         message: 'Guest verification failed',
         matchedFields: checks,
         missingFields: missing,
         requiredMinMatches: minMatch,
+        stillNeedCount: failure.stillNeedCount,
+        whatToAskDe: failure.whatToAskDe,
         reservationId: resolved.hostawayId,
-        hint,
+        hint: failure.whatToAskDe || hint,
       });
     }
 
@@ -154,6 +175,11 @@ export class FonioVerificationService {
       verificationToken: token,
       matchedFields: checks,
       hint,
+      guestNameHint: resolved.guestNameMasked,
+      guestFirstNameHint: resolved.guestFirstNameHint,
+      postVerifyHintDe:
+        'Verifizierung abgeschlossen. Name und Buchungsdaten liegen vor — nicht erneut nach dem Namen fragen. ' +
+        'verificationToken aus dieser Antwort für „Buchung abrufen“ und „Gästeanfrage“ mitschicken.',
       reservation: {
         id: resolved.hostawayId,
         arrivalDate: resolved.arrivalDate.toISOString().slice(0, 10),
@@ -162,13 +188,21 @@ export class FonioVerificationService {
         listingName: resolved.listing.name,
         listingCity: resolved.listing.city,
         status: resolved.status,
+        guestNameHint: resolved.guestNameMasked,
+        guestFirstNameHint: resolved.guestFirstNameHint,
       },
     };
   }
 
   async assertVerified(token: string, reservationHostawayId: number) {
-    if (!token) {
-      throw new UnauthorizedException('Verification token required');
+    if (!token?.trim()) {
+      throw new UnauthorizedException({
+        message: 'Verification token required',
+        hintDe:
+          'Bitte zuerst „Gast verifizieren“ aufrufen und verificationToken aus der Antwort bei „Gästeanfrage“ mitschicken.',
+        fonioHint:
+          'Call POST guest/verify first, then pass verificationToken to guest/requests and guest/reservation.',
+      });
     }
 
     let payload: VerifiedSessionPayload;
@@ -209,6 +243,8 @@ export class FonioVerificationService {
       listingName: reservation.listing.name,
       listingCity: reservation.listing.city,
       status: reservation.status,
+      guestNameHint: reservation.guestNameMasked,
+      guestFirstNameHint: reservation.guestFirstNameHint,
     };
   }
 
@@ -232,32 +268,38 @@ export class FonioVerificationService {
     optionalFields: VerificationField[],
   ): string {
     const labels = optionalFields.map((f) => FIELD_LABELS_DE[f]);
+    const extra = additionalMinMatch(minMatch);
     if (labels.length === 0) {
       return 'Anreise- und Abreisedatum sind immer erforderlich.';
     }
     return (
-      'Anreise- und Abreisedatum sind immer erforderlich. Zusätzlich ' +
-      `${minMatchLabelDe(minMatch)} aus: ${joinLabelsDe(labels)}. ` +
+      'Anreise- und Abreisedatum zählen als eine Angabe. Zusätzlich ' +
+      `${minMatchLabelDe(extra)} aus: ${joinLabelsDe(labels)} ` +
+      `(insgesamt ${minMatch} Treffer). ` +
       'Der Gast muss nicht alles nennen — nur genug zur Bestätigung der Buchung.'
     );
   }
 
   private buildGuestScriptDe(
-    minMatch: number,
+    additionalMinMatchCount: number,
     optionalLabels: string[],
   ): string {
     if (optionalLabels.length === 0) {
       return 'Zur Bestätigung brauche ich bitte Ihr An- und Abreisedatum.';
     }
+    if (additionalMinMatchCount === 0) {
+      return 'Zur Bestätigung brauche ich bitte Ihr An- und Abreisedatum.';
+    }
     return (
-      'Zur Bestätigung brauche ich zuerst Ihr An- und Abreisedatum. Danach reichen ' +
-      `${minMatchLabelDe(minMatch)} — zum Beispiel ${joinLabelsDe(optionalLabels)}. ` +
+      'Zur Bestätigung brauche ich Ihr An- und Abreisedatum sowie ' +
+      `${minMatchLabelDe(additionalMinMatchCount)} — zum Beispiel ${joinLabelsDe(optionalLabels)}. ` +
       'Sie müssen nicht alles nennen.'
     );
   }
 
   private buildVerificationInstructionsDe(params: {
     minMatch: number;
+    additionalMinMatchCount: number;
     optionalFieldsListDe: string;
     hintDe: string;
     guestScriptDe: string;
@@ -271,15 +313,48 @@ export class FonioVerificationService {
       '# Verifizierung bestehender Buchung (aus Admin-Einstellungen, live)',
       `Regel: ${params.hintDe}`,
       `Sage dem Gast in etwa: „${params.guestScriptDe}"`,
-      `- Mindestanzahl übereinstimmender Angaben (ohne Daten): ${params.minMatch}`,
+      `- An- und Abreisedatum zählen als 1 Treffer; insgesamt ${params.minMatch} Treffer nötig (also noch ${params.additionalMinMatchCount} weitere Angabe(n) nach den Daten).`,
       params.optionalFieldsListDe
         ? `- Erlaubte Zusatzangaben (Either/Or): ${params.optionalFieldsListDe}`
         : '- Keine weiteren Zusatzfelder in Admin aktiviert — nur An- und Abreisedatum.',
+      '- Alle bereits genannten Angaben in EINEM Aufruf von „Gast verifizieren“ mitschicken (nicht nur die letzte Antwort).',
       '- Frage NICHT der Reihe nach nach allen Feldern. Sammle, was der Gast nennt, dann Tool „Gast verifizieren“.',
-      '- Bei Fehlschlag: „hint“ aus der API lesen und nur fehlende Angaben nachfragen.',
+      '- Bei Fehlschlag: whatToAskDe oder hint aus der API — nur fehlende Angaben nachfragen.',
+      '- Nach Erfolg: verificationToken speichern; für Gästeanfrage und Buchung abrufen verwenden. Nicht erneut nach Name fragen.',
       '- Erkannter Anrufer oder Vorname allein reichen NICHT.',
       bookingOfferLine,
     ].join('\n');
+  }
+
+  private buildVerifyFailureDetails(
+    matched: VerificationField[],
+    missing: VerificationField[],
+    minMatch: number,
+    matchCount: number,
+  ) {
+    const stillNeedCount = Math.max(0, minMatch - matchCount);
+    const optionalMissing = missing.filter((f) => f !== 'stayDates');
+    const askLabels = optionalMissing
+      .slice(0, stillNeedCount)
+      .map((f) => FIELD_LABELS_DE[f]);
+    const matchedLabels = matched.map((f) => FIELD_LABELS_DE[f]);
+
+    let whatToAskDe: string;
+    if (stillNeedCount <= 0) {
+      whatToAskDe =
+        'Die Angaben reichen noch nicht — bitte prüfen, ob alle bereits genannten Daten im API-Aufruf mitgeschickt wurden.';
+    } else if (askLabels.length === 1) {
+      whatToAskDe =
+        `Noch ${stillNeedCount} Angabe fehlt — bitte nachfragen: ${askLabels[0]}. ` +
+        `Bereits bestätigt: ${matchedLabels.join(', ') || 'keine'}.`;
+    } else {
+      whatToAskDe =
+        `Noch ${stillNeedCount} Angabe(n) fehlen — z. B. ${joinLabelsDe(askLabels)}. ` +
+        `Bereits bestätigt: ${matchedLabels.join(', ') || 'keine'}. ` +
+        'Alle bisher genannten Daten im nächsten Verifizierungsaufruf mitschicken.';
+    }
+
+    return { stillNeedCount, whatToAskDe };
   }
 
   private assertStayDatesProvided(dto: GuestVerifyDto) {
@@ -398,13 +473,16 @@ export class FonioVerificationService {
     },
   ): Promise<boolean> {
     switch (field) {
-      case 'stayDates':
+      case 'stayDates': {
+        const arrival =
+          normalizeDateInput(dto.arrivalDate) ?? dto.arrivalDate;
+        const departure =
+          normalizeDateInput(dto.departureDate) ?? dto.departureDate;
         return (
-          dto.arrivalDate ===
-            reservation.arrivalDate.toISOString().slice(0, 10) &&
-          dto.departureDate ===
-            reservation.departureDate.toISOString().slice(0, 10)
+          arrival === reservation.arrivalDate.toISOString().slice(0, 10) &&
+          departure === reservation.departureDate.toISOString().slice(0, 10)
         );
+      }
       case 'reservationId':
         return (
           dto.reservationId !== undefined &&

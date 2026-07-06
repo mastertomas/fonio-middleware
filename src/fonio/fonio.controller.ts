@@ -212,7 +212,9 @@ export class FonioController {
           matchedFields: body.matchedFields ?? [],
           missingFields: body.missingFields ?? [],
           requiredMinMatches: body.requiredMinMatches ?? null,
-          hint: body.hint ?? null,
+          stillNeedCount: body.stillNeedCount ?? null,
+          whatToAskDe: body.whatToAskDe ?? null,
+          hint: body.whatToAskDe ?? body.hint ?? null,
           arrivalDate: dto.arrivalDate,
           departureDate: dto.departureDate,
         },
@@ -261,37 +263,90 @@ export class FonioController {
     const callerPhone =
       (req.body as { callerNumber?: string }).callerNumber ??
       (req.headers['x-caller-phone'] as string | undefined);
+    const callId = (req.body as { callId?: string }).callId;
 
-    const result = await this.requests.handleRequest(dto, callerPhone);
-    const actionParts: string[] = [`Processed ${dto.requestType} request`];
-    if (result.autoApproved) actionParts.push('auto-approved');
-    if (result.forwardedToTeam) actionParts.push('forwarded to team');
-    if (result.forwardedToHostaway) actionParts.push('posted to Hostaway inbox');
-    if (result.inboxPending) actionParts.push('inbox pending');
+    try {
+      const result = await this.requests.handleRequest(dto, callerPhone);
+      const actionParts: string[] = [`Processed ${dto.requestType} request`];
+      if (result.autoApproved) actionParts.push('auto-approved');
+      if (result.forwardedToTeam) actionParts.push('forwarded to team');
+      if (result.forwardedToHostaway) actionParts.push('posted to Hostaway inbox');
+      if (result.inboxPending) actionParts.push('inbox pending');
 
-    await this.activity.record({
-      action: 'guest_request',
-      callId: (req.body as { callId?: string }).callId,
-      method: req.method,
-      path: req.path,
-      statusCode: 200,
-      requestReceived: { ...dto, callerNumber: callerPhone },
-      middlewareAction: actionParts.join(' — '),
-      outcome: result.status === 'REJECTED' ? 'failed' : 'success',
-      outcomeDetail: result.message,
-      responseRecorded: result,
-      extra: {
-        reservationId: dto.reservationId,
-        requestType: dto.requestType,
-        status: result.status,
-        autoApproved: result.autoApproved,
-        forwardedToTeam: result.forwardedToTeam,
-        forwardedToHostaway: result.forwardedToHostaway,
-        inboxPending: result.inboxPending,
-        reason: result.reason,
-      },
-    });
-    return result;
+      await this.activity.record({
+        action: 'guest_request',
+        callId,
+        method: req.method,
+        path: req.path,
+        statusCode: 200,
+        requestReceived: {
+          reservationId: dto.reservationId,
+          requestType: dto.requestType,
+          callId,
+          hasVerificationToken: Boolean(dto.verificationToken),
+        },
+        middlewareAction: actionParts.join(' — '),
+        outcome: result.status === 'REJECTED' ? 'failed' : 'success',
+        outcomeDetail: result.message,
+        responseRecorded: result,
+        extra: {
+          reservationId: dto.reservationId,
+          requestType: dto.requestType,
+          status: result.status,
+          autoApproved: result.autoApproved,
+          forwardedToTeam: result.forwardedToTeam,
+          forwardedToHostaway: result.forwardedToHostaway,
+          inboxPending: result.inboxPending,
+          reason: result.reason,
+        },
+      });
+      return result;
+    } catch (error) {
+      const raw =
+        error && typeof error === 'object' && 'getResponse' in error
+          ? (error as { getResponse: () => unknown }).getResponse()
+          : null;
+      const body =
+        raw && typeof raw === 'object'
+          ? (raw as Record<string, unknown>)
+          : {
+              message:
+                error instanceof Error ? error.message : 'Guest request failed',
+            };
+      const statusCode =
+        error && typeof error === 'object' && 'getStatus' in error
+          ? (error as { getStatus: () => number }).getStatus()
+          : 400;
+      const hintDe =
+        typeof body.hintDe === 'string'
+          ? body.hintDe
+          : statusCode === 401
+            ? 'Bitte zuerst „Gast verifizieren“ und verificationToken mitschicken.'
+            : null;
+
+      await this.activity.record({
+        action: 'guest_request',
+        callId,
+        method: req.method,
+        path: req.path,
+        statusCode,
+        requestReceived: {
+          reservationId: dto.reservationId,
+          requestType: dto.requestType,
+          callId,
+          hasVerificationToken: Boolean(dto.verificationToken),
+        },
+        middlewareAction: 'Guest request rejected',
+        outcome: 'failed',
+        outcomeDetail: String(body.message ?? 'Guest request failed'),
+        responseRecorded: { ...body, hintDe },
+        extra: {
+          reservationId: dto.reservationId,
+          requestType: dto.requestType,
+        },
+      });
+      throw error;
+    }
   }
 
   @Post('booking-offer')

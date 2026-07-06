@@ -32,6 +32,8 @@ export class FonioCallContextService {
       verification_instructions_de: requirements.verificationInstructionsDe,
       verification_optional_fields_de: requirements.optionalFieldsListDe,
       verification_min_match_count: requirements.minMatchCount,
+      verification_additional_min_match_count: requirements.additionalMinMatchCount,
+      verification_post_verify_hint_de: requirements.postVerifyHintDe,
       booking_offer_enabled: requirements.bookingOfferEnabled,
     };
 

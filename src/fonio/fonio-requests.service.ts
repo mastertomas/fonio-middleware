@@ -103,8 +103,53 @@ export class FonioRequestsService {
       inboxPending,
       hostawayMessageId: forwardResult?.messageId,
       message: this.buildGuestMessage(status, forwardedToHostaway, inboxPending),
+      guestMessageDe: this.buildGuestMessageDe(
+        dto.requestType,
+        status,
+        forwardedToHostaway,
+        inboxPending,
+      ),
       reason: evaluation.reason,
     };
+  }
+
+  private buildGuestMessageDe(
+    requestType: RequestType,
+    status: RequestStatus,
+    forwardedToHostaway: boolean,
+    inboxPending: boolean,
+  ): string {
+    const topic = this.requestTypeLabelDe(requestType);
+    if (status === RequestStatus.AUTO_APPROVED) {
+      return `Ihre Anfrage (${topic}) wurde automatisch bestätigt.`;
+    }
+    if (status === RequestStatus.REJECTED) {
+      return `Ihre Anfrage (${topic}) kann so leider nicht automatisch bestätigt werden. Unser Team meldet sich bei Ihnen.`;
+    }
+    if (forwardedToHostaway) {
+      return `Ihre Anfrage (${topic}) wurde an unser Team weitergeleitet. Sie erhalten eine Rückmeldung in der Buchung.`;
+    }
+    if (inboxPending) {
+      return `Ihre Anfrage (${topic}) wurde aufgenommen. Unser Team wird sich bei Ihnen melden.`;
+    }
+    return `Ihre Anfrage (${topic}) wurde an unser Team weitergeleitet.`;
+  }
+
+  private requestTypeLabelDe(requestType: RequestType): string {
+    switch (requestType) {
+      case RequestType.ADD_PET:
+        return 'Haustier';
+      case RequestType.ADD_GUEST:
+        return 'zusätzlicher Gast';
+      case RequestType.CANCELLATION:
+        return 'Stornierung';
+      case RequestType.EARLY_CHECKIN:
+        return 'früher Check-in';
+      case RequestType.LATE_CHECKOUT:
+        return 'später Check-out';
+      default:
+        return 'Änderung';
+    }
   }
 
   private buildGuestMessage(

@@ -37,13 +37,14 @@
         "phone": "+4915150601701"
       },
       "notes": [
-        "IMMER Anreise + Abreise mitschicken",
-        "Zusätzlich mindestens N übereinstimmende Felder — N = minMatchCount aus API (Admin → Minimum matching fields), NICHT fest im Tool-Text",
-        "N bezieht sich auf: listingName, phone, email, reservationId (stayDates zählt separat mit)",
+        "IMMER Anreise + Abreise mitschicken (YYYY-MM-DD oder DD.MM.YYYY oder z. B. 8. August 2026)",
+        "minMatchCount aus API = Gesamttreffer inkl. Aufenthaltsdaten (Admin → Minimum matching fields)",
+        "Bei minMatchCount=3: An- und Abreisedatum + 2 weitere Angaben reichen (z. B. Unterkunft + Reservierungsnummer)",
+        "ALLE bereits genannten Angaben in EINEM verify-Aufruf mitschicken — nicht nur die letzte Antwort",
         "Der Gast muss NICHT alle Felder nennen — nur genug zur Bestätigung",
-        "reservationId ist optional",
-        "Bei Fehlschlag: hint aus API-Antwort vorlesen / danach fragen",
-        "Daten auch als DD.MM.YYYY möglich (z. B. 08.08.2026)"
+        "Bei Erfolg: verificationToken speichern und bei Gästeanfrage + Buchung abrufen mitschicken",
+        "Bei Fehlschlag: whatToAskDe oder hint aus API — nur fehlende Angaben nachfragen",
+        "Nach Verifizierung nicht erneut nach Name fragen — guestNameHint steht in der Antwort"
       ],
       "whenToUse": "PFLICHT vor Buchungsdetails, Buchung abrufen oder Gästeanfrage — auch wenn Anrufer erkannt wurde"
     },
@@ -63,10 +64,16 @@
       "urlPath": "/api/v1/fonio/guest/requests",
       "bodyExample": {
         "reservationId": 62144308,
-        "requestType": "EARLY_CHECKIN",
+        "requestType": "ADD_PET",
         "verificationToken": "FROM_VERIFY_RESPONSE",
-        "details": { "requestedTime": "15:00", "note": "Geschäftstermin" }
+        "callId": "optional-fonio-call-id",
+        "details": { "note": "Hund dazubuchen" }
       },
+      "notes": [
+        "verificationToken ist PFLICHT — aus der Antwort von Gast verifizieren",
+        "requestType ADD_PET für Hund/Haustier, ADD_GUEST für zusätzlichen Gast",
+        "Bei Erfolg: message an Gast weitergeben (Weiterleitung an Team oder automatische Freigabe)"
+      ],
       "requestTypes": [
         "ADD_GUEST",
         "ADD_PET",
