@@ -46,9 +46,34 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
       );
     }
 
+    const clientSafeFields = [
+      'verified',
+      'hint',
+      'hintDe',
+      'whatToAskDe',
+      'stillNeedCount',
+      'matchedFields',
+      'missingFields',
+      'requiredMinMatches',
+      'reservationId',
+      'fonioHint',
+      'ambiguousCount',
+    ];
+
+    let clientDetails: Record<string, unknown> | undefined;
+    if (typeof details === 'object' && details !== null) {
+      const obj = details as Record<string, unknown>;
+      clientDetails = {};
+      for (const key of clientSafeFields) {
+        if (obj[key] !== undefined) clientDetails[key] = obj[key];
+      }
+      if (!Object.keys(clientDetails).length) clientDetails = undefined;
+    }
+
     response.status(status).json({
       statusCode: status,
       message,
+      ...(clientDetails ?? {}),
       ...(isProd || status < 500
         ? {}
         : { error: exception instanceof Error ? exception.name : 'Error' }),
