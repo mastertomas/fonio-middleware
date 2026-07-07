@@ -7,11 +7,10 @@ import {
   Matches,
 } from 'class-validator';
 import { normalizeDateInput } from '../../common/utils/date-input.util';
+import { parseReservationIdInput } from '../../common/utils/reservation-id.util';
 
 function parseOptionalInt(value: unknown): number | undefined {
-  if (value === '' || value === null || value === undefined) return undefined;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : undefined;
+  return parseReservationIdInput(value);
 }
 
 export class GuestVerifyDto {

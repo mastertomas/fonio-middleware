@@ -37,7 +37,9 @@
         "phone": "+4915150601701"
       },
       "notes": [
-        "IMMER Anreise + Abreise mitschicken (YYYY-MM-DD oder DD.MM.YYYY oder z. B. 8. August 2026)",
+        "IMMER Anreise + Abreise mitschicken (YYYY-MM-DD oder DD.MM.YYYY oder z. B. 8. August 2026 — Jahr nicht weglassen)",
+        "reservationId = Hostaway-Reservierungsnummer (z. B. 62571674), NICHT die Booking.com-Bestätigungsnummer (oft 10+ Ziffern, z. B. 6417940826)",
+        "Hat der Gast nur eine Booking.com-Nummer: Telefon oder E-Mail zur Buchung verwenden, reservationId weglassen",
         "minMatchCount aus API = Gesamttreffer inkl. Aufenthaltsdaten (Admin → Minimum matching fields)",
         "Bei minMatchCount=3: An- und Abreisedatum + 2 weitere Angaben reichen (z. B. Unterkunft + Reservierungsnummer)",
         "ALLE bereits genannten Angaben in EINEM verify-Aufruf mitschicken — nicht nur die letzte Antwort",

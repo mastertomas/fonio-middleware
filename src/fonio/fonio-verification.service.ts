@@ -10,6 +10,7 @@ import {
   phonesMatch,
 } from '../common/utils/crypto.util';
 import { normalizeDateInput } from '../common/utils/date-input.util';
+import { parseReservationIdInput } from '../common/utils/reservation-id.util';
 import { HostawayClient } from '../hostaway/hostaway.client';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -116,7 +117,9 @@ export class FonioVerificationService {
       throw new UnauthorizedException({
         verified: false,
         message: 'Reservation not found',
-        hint,
+        hint:
+          (await this.getRequirements()).hintDe +
+          ' Hinweis: Booking.com-Bestätigungsnummern sind oft nicht die Hostaway-Reservierungsnummer — Telefon oder E-Mail zur Buchung helfen.',
       });
     }
 
@@ -369,15 +372,16 @@ export class FonioVerificationService {
   }
 
   private async findReservation(dto: GuestVerifyDto) {
-    if (dto.reservationId) {
+    const hostawayId = parseReservationIdInput(dto.reservationId);
+    if (hostawayId) {
       let reservation = await this.prisma.reservation.findUnique({
-        where: { hostawayId: dto.reservationId },
+        where: { hostawayId },
         include: { listing: true },
       });
       if (!reservation) {
-        reservation = await this.sync.syncSingleReservation(dto.reservationId);
+        reservation = await this.sync.syncSingleReservation(hostawayId);
       }
-      return reservation;
+      if (reservation) return reservation;
     }
 
     const arrival = this.parseDateOnly(dto.arrivalDate);
