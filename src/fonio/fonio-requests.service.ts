@@ -9,6 +9,7 @@ import {
   RequestType,
 } from '@prisma/client';
 import { hashValue } from '../common/utils/crypto.util';
+import { GuestRequestApplyService } from '../hostaway/guest-request-apply.service';
 import { GuestRequestInboxService } from '../hostaway/guest-request-inbox.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RulesService } from '../rules/rules.service';
@@ -22,6 +23,7 @@ export class FonioRequestsService {
     private readonly verification: FonioVerificationService,
     private readonly rules: RulesService,
     private readonly inbox: GuestRequestInboxService,
+    private readonly apply: GuestRequestApplyService,
   ) {}
 
   async handleRequest(dto: GuestRequestDto, callerPhone?: string) {
@@ -78,8 +80,46 @@ export class FonioRequestsService {
     let forwardResult: Awaited<
       ReturnType<GuestRequestInboxService['forwardGuestRequest']>
     > | null = null;
+    let hostawayApplied = false;
+    let hostawayApplyError: string | undefined;
 
-    if (status === RequestStatus.FORWARDED) {
+    if (status === RequestStatus.AUTO_APPROVED) {
+      const applyResult = await this.apply.applyToHostaway({
+        reservationHostawayId: reservation.hostawayId,
+        requestType: dto.requestType,
+        currentGuests: reservation.numberOfGuests,
+        currentPets: reservation.pets,
+        additionalGuests: dto.additionalGuests,
+      });
+      hostawayApplied = applyResult.applied;
+      hostawayApplyError = applyResult.error;
+
+      await this.prisma.guestRequest.update({
+        where: { id: guestRequest.id },
+        data: {
+          payload: {
+            details: dto.details ?? {},
+            ruleReason: evaluation.reason,
+            ruleId: evaluation.ruleId,
+            hostawayApplied,
+            hostawayApplyError,
+            hostawayPayload: applyResult.hostawayPayload,
+          } as Prisma.InputJsonValue,
+        },
+      });
+
+      if (!hostawayApplied) {
+        forwardResult = await this.inbox.forwardGuestRequest({
+          guestRequestId: guestRequest.id,
+          reservationHostawayId: reservation.hostawayId,
+          requestType: dto.requestType,
+          listingName: reservation.listing.name,
+          summaryLines: this.buildSummaryLines(dto, reservation.listing.name),
+          ruleReason: evaluation.reason,
+          callerNote: dto.details?.note as string | undefined,
+        });
+      }
+    } else if (status === RequestStatus.FORWARDED) {
       forwardResult = await this.inbox.forwardGuestRequest({
         guestRequestId: guestRequest.id,
         reservationHostawayId: reservation.hostawayId,
@@ -98,14 +138,24 @@ export class FonioRequestsService {
       requestId: guestRequest.id,
       status,
       autoApproved: status === RequestStatus.AUTO_APPROVED,
-      forwardedToTeam: status === RequestStatus.FORWARDED,
+      hostawayApplied,
+      hostawayApplyError,
+      forwardedToTeam:
+        status === RequestStatus.FORWARDED ||
+        (status === RequestStatus.AUTO_APPROVED && !hostawayApplied),
       forwardedToHostaway,
       inboxPending,
       hostawayMessageId: forwardResult?.messageId,
-      message: this.buildGuestMessage(status, forwardedToHostaway, inboxPending),
+      message: this.buildGuestMessage(
+        status,
+        hostawayApplied,
+        forwardedToHostaway,
+        inboxPending,
+      ),
       guestMessageDe: this.buildGuestMessageDe(
         dto.requestType,
         status,
+        hostawayApplied,
         forwardedToHostaway,
         inboxPending,
       ),
@@ -116,12 +166,16 @@ export class FonioRequestsService {
   private buildGuestMessageDe(
     requestType: RequestType,
     status: RequestStatus,
+    hostawayApplied: boolean,
     forwardedToHostaway: boolean,
     inboxPending: boolean,
   ): string {
     const topic = this.requestTypeLabelDe(requestType);
+    if (status === RequestStatus.AUTO_APPROVED && hostawayApplied) {
+      return `Ihre Anfrage (${topic}) wurde bestätigt und in Ihrer Buchung übernommen.`;
+    }
     if (status === RequestStatus.AUTO_APPROVED) {
-      return `Ihre Anfrage (${topic}) wurde automatisch bestätigt.`;
+      return `Ihre Anfrage (${topic}) wurde aufgenommen. Unser Team übernimmt die Buchungsänderung in Hostaway.`;
     }
     if (status === RequestStatus.REJECTED) {
       return `Ihre Anfrage (${topic}) kann so leider nicht automatisch bestätigt werden. Unser Team meldet sich bei Ihnen.`;
@@ -154,11 +208,15 @@ export class FonioRequestsService {
 
   private buildGuestMessage(
     status: RequestStatus,
+    hostawayApplied: boolean,
     forwardedToHostaway: boolean,
     inboxPending: boolean,
   ): string {
+    if (status === RequestStatus.AUTO_APPROVED && hostawayApplied) {
+      return 'Request approved and applied to Hostaway reservation';
+    }
     if (status === RequestStatus.AUTO_APPROVED) {
-      return 'Request approved automatically';
+      return 'Request approved locally; Hostaway update pending team follow-up';
     }
     if (status === RequestStatus.REJECTED) {
       return 'Request cannot be approved automatically';

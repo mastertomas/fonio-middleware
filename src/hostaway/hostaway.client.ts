@@ -252,4 +252,18 @@ export class HostawayClient {
     >(`/reservations${forceOverbooking ? '?forceOverbooking=1' : ''}`, payload);
     return data.result;
   }
+
+  async updateReservation(
+    reservationId: number,
+    payload: Record<string, unknown>,
+    forceOverbooking = false,
+  ): Promise<HostawayReservation> {
+    const { data } = await this.http.put<
+      HostawaySingleResponse<HostawayReservation>
+    >(
+      `/reservations/${reservationId}${forceOverbooking ? '?forceOverbooking=1' : ''}`,
+      payload,
+    );
+    return data.result;
+  }
 }

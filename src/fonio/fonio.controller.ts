@@ -269,6 +269,7 @@ export class FonioController {
       const result = await this.requests.handleRequest(dto, callerPhone);
       const actionParts: string[] = [`Processed ${dto.requestType} request`];
       if (result.autoApproved) actionParts.push('auto-approved');
+      if (result.hostawayApplied) actionParts.push('applied in Hostaway');
       if (result.forwardedToTeam) actionParts.push('forwarded to team');
       if (result.forwardedToHostaway) actionParts.push('posted to Hostaway inbox');
       if (result.inboxPending) actionParts.push('inbox pending');
@@ -294,6 +295,8 @@ export class FonioController {
           requestType: dto.requestType,
           status: result.status,
           autoApproved: result.autoApproved,
+          hostawayApplied: result.hostawayApplied,
+          hostawayApplyError: result.hostawayApplyError,
           forwardedToTeam: result.forwardedToTeam,
           forwardedToHostaway: result.forwardedToHostaway,
           inboxPending: result.inboxPending,

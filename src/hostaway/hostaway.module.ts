@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HostawayClient } from './hostaway.client';
 import { HostawayConversationService } from './hostaway-conversation.service';
+import { GuestRequestApplyService } from './guest-request-apply.service';
 import { GuestRequestInboxService } from './guest-request-inbox.service';
 import { HostawayMessagingService } from './hostaway-messaging.service';
 import { HostawaySyncScheduler } from './hostaway-sync.scheduler';
@@ -16,6 +17,7 @@ import { SyncSettingsService } from './sync-settings.service';
     HostawaySyncService,
     HostawayConversationService,
     GuestRequestInboxService,
+    GuestRequestApplyService,
     HostawayMessagingService,
     HostawaySyncScheduler,
     SyncSettingsService,
@@ -26,6 +28,7 @@ import { SyncSettingsService } from './sync-settings.service';
     HostawaySyncService,
     HostawayConversationService,
     GuestRequestInboxService,
+    GuestRequestApplyService,
     HostawayMessagingService,
     SyncSettingsService,
     ListingHierarchyService,

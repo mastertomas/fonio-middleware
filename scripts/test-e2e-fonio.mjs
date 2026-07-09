@@ -164,7 +164,7 @@ if (!verificationToken) {
     details: { note: 'E2E test: Hund dazubuchen' },
   });
   if (res.ok && data.guestMessageDe) {
-    pass('Guest request ADD_PET', data.guestMessageDe);
+    pass('Guest request ADD_PET', `${data.guestMessageDe}${data.hostawayApplied ? ' [Hostaway applied]' : ''}`);
   } else {
     fail('Guest request ADD_PET', `${res.status} ${JSON.stringify(data)}`);
   }
@@ -180,7 +180,7 @@ if (!verificationToken) {
     details: { note: 'E2E test: zusätzlicher Gast' },
   });
   if (res.ok && data.guestMessageDe) {
-    pass('Guest request ADD_GUEST', data.guestMessageDe);
+    pass('Guest request ADD_GUEST', `${data.guestMessageDe}${data.hostawayApplied ? ' [Hostaway applied]' : ''}`);
   } else {
     fail('Guest request ADD_GUEST', `${res.status} ${JSON.stringify(data)}`);
   }
