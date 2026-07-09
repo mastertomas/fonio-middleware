@@ -38,6 +38,8 @@
       },
       "notes": [
         "IMMER Anreise + Abreise mitschicken (YYYY-MM-DD oder DD.MM.YYYY oder z. B. 8. August 2026 — Jahr nicht weglassen)",
+        "Optionale Felder (phone, email, listingName, reservationId) NUR mitschicken, wenn wirklich ein Wert vorliegt — leere Strings oder unaufgelöste {{platzhalter}} vermeiden",
+        "Aufenthaltsdaten + EINE weitere gültige Angabe genügen — Verifizierung klappt bereits beim ersten Aufruf",
         "reservationId = Hostaway-Reservierungsnummer (z. B. 62571674), NICHT die Booking.com-Bestätigungsnummer (oft 10+ Ziffern, z. B. 6417940826)",
         "Hat der Gast nur eine Booking.com-Nummer: Telefon oder E-Mail zur Buchung verwenden, reservationId weglassen",
         "minMatchCount aus API = Gesamttreffer inkl. Aufenthaltsdaten (Admin → Minimum matching fields)",

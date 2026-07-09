@@ -8,6 +8,7 @@ import {
   IsString,
 } from 'class-validator';
 import { RequestType } from '@prisma/client';
+import { normalizeOptionalInput } from '../../common/utils/optional-input.util';
 
 function parseRequiredInt(value: unknown): number {
   if (value === '' || value === null || value === undefined) {
@@ -30,6 +31,7 @@ export class GuestRequestDto {
   details?: Record<string, unknown>;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalInput(value))
   @IsString()
   callId?: string;
 

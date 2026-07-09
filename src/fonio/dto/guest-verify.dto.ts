@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsInt,
@@ -7,23 +7,22 @@ import {
   Matches,
 } from 'class-validator';
 import { normalizeDateInput } from '../../common/utils/date-input.util';
+import { normalizeOptionalInput } from '../../common/utils/optional-input.util';
 import { parseReservationIdInput } from '../../common/utils/reservation-id.util';
-
-function parseOptionalInt(value: unknown): number | undefined {
-  return parseReservationIdInput(value);
-}
 
 export class GuestVerifyDto {
   @IsOptional()
-  @Transform(({ value }) => parseOptionalInt(value))
+  @Transform(({ value }) => parseReservationIdInput(value))
   @IsInt()
   reservationId?: number;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalInput(value))
   @IsString()
   phone?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalInput(value))
   @IsEmail()
   email?: string;
 
@@ -38,10 +37,12 @@ export class GuestVerifyDto {
   departureDate!: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalInput(value))
   @IsString()
   listingName?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalInput(value))
   @IsString()
   callId?: string;
 }

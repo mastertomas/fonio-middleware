@@ -4,13 +4,21 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Injectable,
   Logger,
+  Optional,
 } from '@nestjs/common';
+import { LogLevel } from '@prisma/client';
 import { Request, Response } from 'express';
+import { sanitizeFonioPayload } from '../../fonio/fonio-activity.util';
+import { AuditLogService } from '../../logging/audit-log.service';
 
 @Catch()
+@Injectable()
 export class GlobalHttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalHttpExceptionFilter.name);
+
+  constructor(@Optional() private readonly audit?: AuditLogService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -86,5 +94,61 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request.url,
     });
+
+    // Validation errors (HTTP 400) are thrown by ValidationPipe BEFORE the
+    // controller runs, so fonio endpoints never log them via activity.record.
+    // Record them here so bad payloads (e.g. empty/invalid email) are visible
+    // in the fonio Activity tab instead of failing silently.
+    if (
+      this.audit &&
+      status === HttpStatus.BAD_REQUEST &&
+      request.url?.includes('/api/v1/fonio/')
+    ) {
+      void this.logFonioValidationError(request, status, message);
+    }
+  }
+
+  private async logFonioValidationError(
+    request: Request,
+    status: number,
+    message: string | string[],
+  ) {
+    try {
+      await this.audit!.log({
+        level: LogLevel.WARN,
+        source: 'fonio',
+        action: this.fonioActionFromPath(request.url),
+        method: request.method,
+        path: request.url,
+        statusCode: status,
+        metadata: {
+          outcome: 'failed',
+          middlewareAction:
+            'Request rejected by validation before processing (HTTP 400)',
+          validationErrors: Array.isArray(message)
+            ? message
+            : [String(message)],
+          requestReceived: sanitizeFonioPayload(
+            (request.body ?? {}) as Record<string, unknown>,
+          ),
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to record fonio validation error: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private fonioActionFromPath(url: string): string {
+    if (url.includes('guest/verify')) return 'guest_verify';
+    if (url.includes('guest/requests')) return 'guest_request';
+    if (url.includes('guest/reservation')) return 'guest_reservation';
+    if (url.includes('availability')) return 'availability';
+    if (url.includes('booking-offer')) return 'booking_offer';
+    if (url.includes('call-context')) return 'call_context';
+    return 'fonio_request';
   }
 }

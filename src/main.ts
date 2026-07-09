@@ -5,7 +5,6 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { join } from 'path';
 import { AppModule } from './app.module';
-import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
 
 function applySecurityMiddleware(
   app: NestExpressApplication,
@@ -51,8 +50,6 @@ async function bootstrap() {
   app.set('trust proxy', 1);
   applySecurityMiddleware(app, config);
 
-  app.useGlobalFilters(new GlobalHttpExceptionFilter());
-
   app.useStaticAssets(join(__dirname, '..', 'public', 'admin'), {
     prefix: '/admin',
     index: 'index.html',
@@ -62,7 +59,9 @@ async function bootstrap() {
     new ValidationPipe({
       whitelist: true,
       transform: true,
-      forbidNonWhitelisted: true,
+      // Unknown fields are silently stripped (whitelist) instead of rejected.
+      // fonio may send extra/unresolved template fields; those must not 400 the request.
+      forbidNonWhitelisted: false,
     }),
   );
 
