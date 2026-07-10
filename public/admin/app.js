@@ -958,11 +958,11 @@ $('#listing-aliases-save')?.addEventListener('click', async () => {
       method: 'PATCH',
       body: JSON.stringify({ aliases }),
     });
-    notify(t('listings.aliasesSaved'), 'success');
+    notify.success(t('listings.aliasesSaved'));
     closeListingAliasesModal();
     await loadListings();
   } catch (err) {
-    notify(err.message, 'error');
+    notify.error(err.message);
   }
 });
 
