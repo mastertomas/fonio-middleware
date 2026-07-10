@@ -11,6 +11,7 @@ import {
 } from '../common/utils/crypto.util';
 import { normalizeDateInput } from '../common/utils/date-input.util';
 import { parseReservationIdInput } from '../common/utils/reservation-id.util';
+import { listingNameMatches } from '../common/utils/listing-name-match.util';
 import { HostawayClient } from '../hostaway/hostaway.client';
 import { HostawaySyncService } from '../hostaway/hostaway-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -430,9 +431,8 @@ export class FonioVerificationService {
     let pool = [...candidates];
 
     if (dto.listingName?.trim()) {
-      const term = dto.listingName.trim().toLowerCase();
       const byListing = pool.filter((r) =>
-        r.listing.name.toLowerCase().includes(term),
+        listingNameMatches(dto.listingName!, r.listing),
       );
       if (byListing.length > 0) pool = byListing;
     }
@@ -472,7 +472,7 @@ export class FonioVerificationService {
       emailHash: string | null;
       arrivalDate: Date;
       departureDate: Date;
-      listing: { name: string };
+      listing: { name: string; aliases?: string[] };
       hostawayId: number;
     },
   ): Promise<boolean> {
@@ -502,9 +502,7 @@ export class FonioVerificationService {
           : false;
       case 'listingName': {
         if (!dto.listingName) return false;
-        return reservation.listing.name
-          .toLowerCase()
-          .includes(dto.listingName.toLowerCase());
+        return listingNameMatches(dto.listingName, reservation.listing);
       }
       default:
         return false;

@@ -9,6 +9,7 @@ let cachedListings = [];
 let cachedConditionSchema = null;
 let editingRuleId = null;
 let editingUserId = null;
+let editingListingAliases = null;
 let dashboardPoll = null;
 let syncSettingsDirty = false;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -881,31 +882,89 @@ async function loadDashboard() {
 async function loadListings() {
   ensureTableToolbar('#listings-toolbar', 'listings', loadListings);
   const data = await api(`/listings?${tableQuery('listings')}`);
-  const rows = data.items.map((l) => `
+  cachedListings = data.items || [];
+  const rows = cachedListings.map((l) => {
+    const aliasText = (l.aliases && l.aliases.length)
+      ? esc(l.aliases.join(', '))
+      : `<span class="muted">${t('listings.aliasesEmpty')}</span>`;
+    const editBtn = canEdit()
+      ? `<button type="button" class="btn ghost btn-sm listing-aliases-edit" data-id="${esc(l.id)}">${t('listings.aliasesEdit')}</button>`
+      : '';
+    return `
     <tr>
       <td>${l.hostawayId}</td>
       <td>${esc(l.name)}</td>
+      <td class="listing-aliases-cell">${aliasText}</td>
       <td>${esc(l.city || '–')}</td>
       <td>${esc(l.listingGroup?.name || '–')}</td>
       <td>${l.personCapacity}</td>
       <td><span class="badge live">${l.status}</span></td>
       <td>${l.isBookable ? t('common.yes') : t('common.no')}</td>
+      <td>${editBtn}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
   $('#listings-table').innerHTML = `
     <table><thead><tr>
       ${sortTh('listings', 'hostawayId', t('listings.id'))}
       ${sortTh('listings', 'name', t('listings.name'))}
+      <th>${t('listings.aliases')}</th>
       ${sortTh('listings', 'city', t('listings.city'))}
       <th>${t('listings.group')}</th>
       ${sortTh('listings', 'personCapacity', t('listings.guests'))}
       ${sortTh('listings', 'status', t('listings.status'))}
       <th>${t('listings.bookable')}</th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="7">${t('table.infoEmpty')}</td></tr>`}</tbody></table>`;
+      <th></th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="9">${t('table.infoEmpty')}</td></tr>`}</tbody></table>`;
   bindSortableHeaders('#listings-table', 'listings', loadListings);
+  $$('.listing-aliases-edit').forEach((btn) => {
+    btn.addEventListener('click', () => openListingAliasesModal(btn.dataset.id));
+  });
   renderTableInfo('#listings-info', data);
   renderPagination('#listings-pagination', data, 'listings', loadListings);
 }
+
+function parseAliasesInput(raw) {
+  return [...new Set(
+    raw.split(/[,;\n]+/).map((s) => s.trim()).filter((s) => s.length >= 2),
+  )].slice(0, 30);
+}
+
+function openListingAliasesModal(listingId) {
+  const listing = cachedListings.find((l) => l.id === listingId);
+  if (!listing) return;
+  editingListingAliases = { id: listing.id, name: listing.name };
+  $('#listing-aliases-modal-listing').textContent = listing.name;
+  $('#listing-aliases-input').value = (listing.aliases || []).join(', ');
+  $('#listing-aliases-modal').classList.remove('hidden');
+  document.body.classList.add('modal-open');
+}
+
+function closeListingAliasesModal() {
+  editingListingAliases = null;
+  $('#listing-aliases-modal').classList.add('hidden');
+  document.body.classList.remove('modal-open');
+}
+
+$('#listing-aliases-cancel')?.addEventListener('click', closeListingAliasesModal);
+$('#listing-aliases-modal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'listing-aliases-modal') closeListingAliasesModal();
+});
+$('#listing-aliases-save')?.addEventListener('click', async () => {
+  if (!editingListingAliases || !canEdit()) return;
+  try {
+    const aliases = parseAliasesInput($('#listing-aliases-input').value);
+    await api(`/listings/${editingListingAliases.id}/aliases`, {
+      method: 'PATCH',
+      body: JSON.stringify({ aliases }),
+    });
+    notify(t('listings.aliasesSaved'), 'success');
+    closeListingAliasesModal();
+    await loadListings();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
 
 async function loadGroups() {
   ensureTableToolbar('#groups-toolbar', 'groups', loadGroups);

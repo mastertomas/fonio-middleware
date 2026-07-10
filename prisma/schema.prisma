@@ -97,6 +97,7 @@ model Listing {
   listingGroup     ListingGroup?  @relation(fields: [listingGroupId], references: [id])
   parentHostawayId Int?
   tags             String[]
+  aliases          String[]       @default([])
   rawMetadata      Json?
   calendarDays     CalendarDay[]
   reservations     Reservation[]

@@ -198,6 +198,15 @@ body {
   margin-bottom: 0.75rem;
 }
 
+.listing-aliases-cell {
+  max-width: 14rem;
+  font-size: 0.88rem;
+}
+
+.muted {
+  color: var(--text-muted, #8b949e);
+}
+
 .checkbox-row {
   display: flex;
   align-items: center;

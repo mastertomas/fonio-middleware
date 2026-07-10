@@ -101,6 +101,7 @@
 
       <section id="tab-listings" class="tab hidden">
         <header class="page-header"><h2 data-i18n="listings.title">Listings</h2></header>
+        <p class="field-hint" data-i18n="listings.aliasesHint">Add short guest-facing names (aliases) when callers use a different name than in Hostaway — e.g. „Wiesenblick“ for „2-Bedroom Apartment Wiesenblick“. Used for phone verification matching.</p>
         <div id="listings-toolbar" class="table-toolbar"></div>
         <div class="table-wrap" id="listings-table"></div>
         <div id="listings-info" class="table-info"></div>
@@ -408,6 +409,22 @@
       <div id="conversation-modal-body" class="conversation-messages"></div>
       <div class="modal-actions">
         <button type="button" id="conversation-modal-close" class="btn ghost" data-i18n="common.close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="listing-aliases-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h4 id="listing-aliases-modal-title" data-i18n="listings.aliasesEdit">Property name aliases</h4>
+      <p class="field-hint" id="listing-aliases-modal-listing"></p>
+      <label>
+        <span class="field-label" data-i18n="listings.aliasesLabel">Aliases (comma or line-separated)</span>
+        <textarea id="listing-aliases-input" rows="4" placeholder="Wiesenblick, Wiesen Blick"></textarea>
+      </label>
+      <p class="field-hint" data-i18n="listings.aliasesExamples">Examples: short names guests say on the phone, or common speech-to-text variants.</p>
+      <div class="modal-actions">
+        <button type="button" id="listing-aliases-save" class="btn primary" data-i18n="users.save">Save</button>
+        <button type="button" id="listing-aliases-cancel" class="btn ghost" data-i18n="common.cancel">Cancel</button>
       </div>
     </div>
   </div>

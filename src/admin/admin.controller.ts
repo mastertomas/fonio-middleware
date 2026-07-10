@@ -43,6 +43,7 @@ import {
   UpdateApprovalRuleDto,
   UpdateVerificationConfigDto,
 } from './dto/admin-rules.dto';
+import { UpdateListingAliasesDto } from './dto/update-listing-aliases.dto';
 import { UpdateSyncSettingsDto } from './dto/sync-settings.dto';
 import { UpdateLogSettingsDto } from './dto/log-settings.dto';
 import { AdminAuditInterceptor } from '../logging/admin-audit.interceptor';
@@ -86,6 +87,31 @@ export class AdminController {
       }),
     ]);
     return paginated(items, total, page, pageSize);
+  }
+
+  @Patch('listings/:id/aliases')
+  @Roles(AdminRole.EDITOR)
+  @ApiOperation({
+    summary: 'Set guest-facing property name aliases for verification matching',
+  })
+  async updateListingAliases(
+    @Param('id') id: string,
+    @Body() dto: UpdateListingAliasesDto,
+  ) {
+    const normalized = [
+      ...new Map(
+        dto.aliases.map((a) => [a.trim().toLowerCase(), a.trim()]),
+      ).values(),
+    ];
+    const listing = await this.prisma.listing.findUnique({ where: { id } });
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+    return this.prisma.listing.update({
+      where: { id },
+      data: { aliases: normalized },
+      include: { listingGroup: true },
+    });
   }
 
   @Get('listing-groups')
@@ -377,7 +403,8 @@ export class AdminController {
       descriptions: {
         stayDates:
           'Arrival + departure dates (always required from caller; counts as one match)',
-        listingName: 'Booked property name (partial match, e.g. Wiesenblick)',
+        listingName:
+          'Booked property name (partial match; also matches aliases from Listings tab)',
         phone: 'Phone number linked to the booking',
         email: 'Email address on the booking',
         reservationId:
