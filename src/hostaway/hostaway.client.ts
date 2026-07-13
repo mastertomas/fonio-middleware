@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   HostawayCalendarDay,
   HostawayCreateReservationResult,
+  HostawayGuestCharge,
   HostawayListResponse,
   HostawayListing,
   HostawayPriceDetails,
@@ -264,6 +265,37 @@ export class HostawayClient {
       `/reservations/${reservationId}${forceOverbooking ? '?forceOverbooking=1' : ''}`,
       payload,
     );
+    return data.result;
+  }
+
+  async getGuestCharges(reservationId: number): Promise<HostawayGuestCharge[]> {
+    const { data } = await this.http.get<
+      HostawayListResponse<HostawayGuestCharge>
+    >('/guestPayments/charges', {
+      params: { reservationId },
+    });
+    return data.result ?? [];
+  }
+
+  async createOfflineCharge(
+    reservationId: number,
+    payload: {
+      title: string;
+      description?: string;
+      amount: number;
+      paymentMethod: string;
+      status: 'paid' | 'due';
+      scheduledDate?: string;
+    },
+  ): Promise<HostawayGuestCharge> {
+    const { data } = await this.http.post<
+      HostawaySingleResponse<HostawayGuestCharge>
+    >(`/guestPayments/charges/${reservationId}`, {
+      ...payload,
+      scheduledDate:
+        payload.scheduledDate ??
+        new Date().toISOString().slice(0, 19).replace('T', ' '),
+    });
     return data.result;
   }
 }

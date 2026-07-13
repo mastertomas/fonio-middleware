@@ -10,6 +10,10 @@ import { GuestRequestInboxService } from './guest-request-inbox.service';
 import { HostawayCalendarDay, HostawayReservation } from './hostaway.types';
 import { EXCLUDED_LISTING_IDS } from './listing-hierarchy.config';
 import { ListingHierarchyService } from './listing-hierarchy.service';
+import {
+  PaymentInboxService,
+  ProcessPaymentUpdatesResult,
+} from './payment-inbox.service';
 
 @Injectable()
 export class HostawaySyncService implements OnModuleInit {
@@ -23,6 +27,7 @@ export class HostawaySyncService implements OnModuleInit {
     private readonly config: ConfigService,
     private readonly conversations: HostawayConversationService,
     private readonly guestInbox: GuestRequestInboxService,
+    private readonly paymentInbox: PaymentInboxService,
   ) {}
 
   async onModuleInit() {
@@ -528,7 +533,7 @@ export class HostawaySyncService implements OnModuleInit {
   async syncFromWebhook(
     event: string,
     metadata?: Record<string, unknown>,
-  ): Promise<{ listings: number; reservations: number }> {
+  ): Promise<{ listings: number; reservations: number; paymentInbox?: ProcessPaymentUpdatesResult | null }> {
     const job = await this.prisma.syncJob.create({
       data: { jobType: `webhook:${event}`, status: 'running' },
     });
@@ -536,9 +541,20 @@ export class HostawaySyncService implements OnModuleInit {
     try {
       let listings = 0;
       let reservations = 0;
+      let paymentInbox: ProcessPaymentUpdatesResult | null = null;
       const normalized = event.toLowerCase();
+      const objectId = Number(metadata?.objectId);
+      const hasObjectId = Number.isFinite(objectId) && objectId > 0;
+
       if (normalized.includes('reservation')) {
-        reservations = await this.syncRecentReservations();
+        if (hasObjectId) {
+          await this.syncSingleReservation(objectId);
+          reservations = 1;
+          paymentInbox =
+            await this.paymentInbox.processReservationPaymentUpdates(objectId);
+        } else {
+          reservations = await this.syncRecentReservations();
+        }
       }
       if (normalized.includes('listing')) {
         listings = await this.syncListings();
@@ -548,10 +564,15 @@ export class HostawaySyncService implements OnModuleInit {
         data: {
           status: 'completed',
           finishedAt: new Date(),
-          metadata: { listings, reservations, ...metadata },
+          metadata: {
+            listings,
+            reservations,
+            paymentInbox: paymentInbox ?? undefined,
+            ...metadata,
+          } as Prisma.InputJsonValue,
         },
       });
-      return { listings, reservations };
+      return { listings, reservations, paymentInbox };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       await this.prisma.syncJob.update({

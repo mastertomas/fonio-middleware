@@ -8,6 +8,7 @@ import { FonioAvailabilityService } from './fonio-availability.service';
 import { FonioBookingOfferService } from './fonio-booking-offer.service';
 import { FonioCallContextService } from './fonio-call-context.service';
 import { FonioController } from './fonio.controller';
+import { FonioPaymentService } from './fonio-payment.service';
 import { FonioRequestsService } from './fonio-requests.service';
 import { FonioVerificationService } from './fonio-verification.service';
 
@@ -32,6 +33,7 @@ import { FonioVerificationService } from './fonio-verification.service';
     FonioCallContextService,
     FonioVerificationService,
     FonioRequestsService,
+    FonioPaymentService,
     FonioBookingOfferService,
     FonioActivityService,
   ],

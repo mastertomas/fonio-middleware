@@ -110,3 +110,15 @@ export interface HostawayCreateReservationResult {
   status: string;
   totalPrice?: number;
 }
+
+export interface HostawayGuestCharge {
+  id: number;
+  reservationId?: number;
+  title?: string;
+  amount?: number;
+  currency?: string;
+  status?: string;
+  paymentMethod?: string;
+  chargeDate?: string | null;
+  scheduledDate?: string | null;
+}

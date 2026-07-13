@@ -7,7 +7,7 @@ After you configure a **Unified Webhook** in Hostaway, Hostaway will **automatic
 | Event | When it fires |
 |-------|----------------|
 | `reservation created` | New booking in Hostaway (any channel) |
-| `reservation updated` | Existing reservation changed (dates, status, guests, etc.) |
+| `reservation updated` | Existing reservation changed (dates, status, guests, **payment status**, etc.) |
 | `new message received` | New guest message in a conversation |
 
 **Important:** Hostaway unified webhooks do **not** include listing create/update events. Listing changes are picked up by:
@@ -21,7 +21,8 @@ After you configure a **Unified Webhook** in Hostaway, Hostaway will **automatic
 1. Receives `POST /webhooks/hostaway`
 2. Validates Basic Auth (if `HOSTAWAY_WEBHOOK_USERNAME` / `HOSTAWAY_WEBHOOK_PASSWORD` are set)
 3. Runs a **partial reservation sync** (last 7 days → +180 days window) for reservation events
-4. Logs the event in **Dashboard → Hostaway webhook activity**
+4. When a webhook includes a reservation ID, checks **guest payment charges** in Hostaway and posts an inbox note for any newly paid charge (bank transfer, Stripe, manual mark-as-paid, etc.)
+5. Logs the event in **Dashboard → Hostaway webhook activity**
 
 **No popup notification** — the dashboard shows webhook history. With auto-refresh enabled on the Dashboard tab, new events appear within ~15 seconds.
 

@@ -5,6 +5,7 @@ import { HostawayConversationService } from './hostaway-conversation.service';
 import { GuestRequestApplyService } from './guest-request-apply.service';
 import { GuestRequestInboxService } from './guest-request-inbox.service';
 import { HostawayMessagingService } from './hostaway-messaging.service';
+import { PaymentInboxService } from './payment-inbox.service';
 import { HostawaySyncScheduler } from './hostaway-sync.scheduler';
 import { HostawaySyncService } from './hostaway-sync.service';
 import { ListingHierarchyService } from './listing-hierarchy.service';
@@ -19,6 +20,7 @@ import { SyncSettingsService } from './sync-settings.service';
     GuestRequestInboxService,
     GuestRequestApplyService,
     HostawayMessagingService,
+    PaymentInboxService,
     HostawaySyncScheduler,
     SyncSettingsService,
     ListingHierarchyService,
@@ -30,6 +32,7 @@ import { SyncSettingsService } from './sync-settings.service';
     GuestRequestInboxService,
     GuestRequestApplyService,
     HostawayMessagingService,
+    PaymentInboxService,
     SyncSettingsService,
     ListingHierarchyService,
   ],

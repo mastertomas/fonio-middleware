@@ -16,11 +16,13 @@ import { FonioCallContextDto } from './dto/call-context.dto';
 import { GuestRequestDto } from './dto/guest-request.dto';
 import { GuestVerifyDto } from './dto/guest-verify.dto';
 import { BookingOfferDto } from './dto/booking-offer.dto';
+import { PaymentReceivedDto } from './dto/payment-received.dto';
 import { FonioActivityService } from './fonio-activity.service';
 import { listProvidedVerifyFields } from './fonio-activity.util';
 import { FonioAvailabilityService } from './fonio-availability.service';
 import { FonioBookingOfferService } from './fonio-booking-offer.service';
 import { FonioCallContextService } from './fonio-call-context.service';
+import { FonioPaymentService } from './fonio-payment.service';
 import { FonioRequestsService } from './fonio-requests.service';
 import { FonioVerificationService } from './fonio-verification.service';
 
@@ -34,6 +36,7 @@ export class FonioController {
     private readonly availability: FonioAvailabilityService,
     private readonly verification: FonioVerificationService,
     private readonly requests: FonioRequestsService,
+    private readonly payments: FonioPaymentService,
     private readonly bookingOffer: FonioBookingOfferService,
     private readonly activity: FonioActivityService,
   ) {}
@@ -346,6 +349,88 @@ export class FonioController {
         extra: {
           reservationId: dto.reservationId,
           requestType: dto.requestType,
+        },
+      });
+      throw error;
+    }
+  }
+
+  @Post('guest/payments')
+  @ApiOperation({
+    summary:
+      'Record a guest payment in Hostaway and post a note to the reservation inbox',
+  })
+  async recordPayment(@Body() dto: PaymentReceivedDto, @Req() req: Request) {
+    const callId = dto.callId;
+    try {
+      const result = await this.payments.recordPayment(dto);
+      const actionParts = ['Recorded guest payment'];
+      if (result.paymentRecorded) actionParts.push('offline charge created in Hostaway');
+      if (result.inboxPosted) actionParts.push('posted to Hostaway inbox');
+      if (result.inboxPending) actionParts.push('inbox pending');
+
+      await this.activity.record({
+        action: 'guest_payment',
+        callId,
+        method: req.method,
+        path: req.path,
+        statusCode: 200,
+        requestReceived: {
+          reservationId: dto.reservationId,
+          amount: dto.amount,
+          callId,
+          hasVerificationToken: Boolean(dto.verificationToken),
+        },
+        middlewareAction: actionParts.join(' — '),
+        outcome:
+          result.paymentRecorded || result.inboxPosted ? 'success' : 'failed',
+        outcomeDetail: result.message,
+        responseRecorded: result,
+        extra: {
+          reservationId: dto.reservationId,
+          amount: dto.amount,
+          paymentRecorded: result.paymentRecorded,
+          chargeId: result.chargeId,
+          inboxPosted: result.inboxPosted,
+        },
+      });
+      return result;
+    } catch (error) {
+      const raw =
+        error && typeof error === 'object' && 'getResponse' in error
+          ? (error as { getResponse: () => unknown }).getResponse()
+          : null;
+      const body =
+        raw && typeof raw === 'object'
+          ? (raw as Record<string, unknown>)
+          : {
+              message:
+                error instanceof Error ? error.message : 'Payment recording failed',
+            };
+      const statusCode =
+        error && typeof error === 'object' && 'getStatus' in error
+          ? (error as { getStatus: () => number }).getStatus()
+          : 400;
+
+      await this.activity.record({
+        action: 'guest_payment',
+        callId,
+        method: req.method,
+        path: req.path,
+        statusCode,
+        requestReceived: {
+          reservationId: dto.reservationId,
+          amount: dto.amount,
+          callId,
+          hasVerificationToken: Boolean(dto.verificationToken),
+        },
+        middlewareAction: 'Payment recording rejected',
+        outcome: 'failed',
+        outcomeDetail: String(body.message ?? 'Payment recording failed'),
+        responseRecorded: body,
+        extra: {
+          reservationId: dto.reservationId,
+          amount: dto.amount,
         },
       });
       throw error;

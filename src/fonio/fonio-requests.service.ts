@@ -77,9 +77,12 @@ export class FonioRequestsService {
       },
     });
 
-    let forwardResult: Awaited<
-      ReturnType<GuestRequestInboxService['forwardGuestRequest']>
-    > | null = null;
+    let forwardResult: {
+      forwarded?: boolean;
+      posted?: boolean;
+      messageId?: number;
+      inboxPending: boolean;
+    } | null = null;
     let hostawayApplied = false;
     let hostawayApplyError: string | undefined;
 
@@ -118,6 +121,13 @@ export class FonioRequestsService {
           ruleReason: evaluation.reason,
           callerNote: dto.details?.note as string | undefined,
         });
+      } else {
+        forwardResult = await this.inbox.notifyAppliedChange({
+          guestRequestId: guestRequest.id,
+          reservationHostawayId: reservation.hostawayId,
+          requestType: dto.requestType,
+          additionalGuests: dto.additionalGuests,
+        });
       }
     } else if (status === RequestStatus.FORWARDED) {
       forwardResult = await this.inbox.forwardGuestRequest({
@@ -131,7 +141,7 @@ export class FonioRequestsService {
       });
     }
 
-    const forwardedToHostaway = forwardResult?.forwarded ?? false;
+    const forwardedToHostaway = forwardResult?.forwarded ?? forwardResult?.posted ?? false;
     const inboxPending = forwardResult?.inboxPending ?? false;
 
     return {

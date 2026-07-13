@@ -35,6 +35,115 @@ export class GuestRequestInboxService {
     private readonly messaging: HostawayMessagingService,
   ) {}
 
+  async postInboxMessage(
+    reservationHostawayId: number,
+    send: (conversationId: number) => Promise<number>,
+  ): Promise<{
+    posted: boolean;
+    conversationId?: number;
+    messageId?: number;
+    inboxPending: boolean;
+    error?: string;
+  }> {
+    const conversationId = await this.conversations.resolveConversationId(
+      reservationHostawayId,
+    );
+
+    if (!conversationId) {
+      this.logger.warn(
+        `No Hostaway conversation for reservation ${reservationHostawayId} — inbox note pending`,
+      );
+      return {
+        posted: false,
+        inboxPending: true,
+        error: 'No Hostaway guest conversation found for this reservation',
+      };
+    }
+
+    try {
+      const messageId = await send(conversationId);
+      return {
+        posted: true,
+        conversationId,
+        messageId,
+        inboxPending: false,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Hostaway message send failed';
+      this.logger.error(
+        `Failed to post inbox message for reservation ${reservationHostawayId}: ${message}`,
+      );
+      return {
+        posted: false,
+        conversationId,
+        inboxPending: true,
+        error: message,
+      };
+    }
+  }
+
+  async notifyAppliedChange(params: {
+    guestRequestId: string;
+    reservationHostawayId: number;
+    requestType: RequestType;
+    additionalGuests?: number;
+  }): Promise<{
+    posted: boolean;
+    conversationId?: number;
+    messageId?: number;
+    inboxPending: boolean;
+    error?: string;
+  }> {
+    const result = await this.postInboxMessage(
+      params.reservationHostawayId,
+      (conversationId) =>
+        this.messaging.notifyAppliedChangeToInbox({
+          conversationId,
+          requestType: params.requestType,
+          additionalGuests: params.additionalGuests,
+        }),
+    );
+
+    if (result.posted && result.messageId) {
+      await this.prisma.guestRequest.update({
+        where: { id: params.guestRequestId },
+        data: {
+          forwardedToHostaway: true,
+          hostawayMessageId: result.messageId,
+        },
+      });
+    }
+
+    return result;
+  }
+
+  async notifyPaymentReceived(params: {
+    reservationHostawayId: number;
+    amount: number;
+    currency?: string;
+    occurredAt?: Date;
+    paymentMethodLabel?: string;
+    source?: 'hostaway' | 'fonio';
+  }): Promise<{
+    posted: boolean;
+    conversationId?: number;
+    messageId?: number;
+    inboxPending: boolean;
+    error?: string;
+  }> {
+    return this.postInboxMessage(params.reservationHostawayId, (conversationId) =>
+      this.messaging.notifyPaymentReceivedToInbox({
+        conversationId,
+        amount: params.amount,
+        currency: params.currency,
+        occurredAt: params.occurredAt,
+        paymentMethodLabel: params.paymentMethodLabel,
+        source: params.source,
+      }),
+    );
+  }
+
   async forwardGuestRequest(
     params: ForwardGuestRequestParams,
   ): Promise<{
@@ -44,59 +153,37 @@ export class GuestRequestInboxService {
     inboxPending: boolean;
     error?: string;
   }> {
-    const conversationId = await this.conversations.resolveConversationId(
+    const result = await this.postInboxMessage(
       params.reservationHostawayId,
+      (conversationId) =>
+        this.messaging.forwardRequestToInbox({
+          conversationId,
+          guestRequestId: params.guestRequestId,
+          requestType: params.requestType,
+          requestTypeLabel: REQUEST_TYPE_LABELS[params.requestType],
+          summary: params.summaryLines.join('\n'),
+          ruleReason: params.ruleReason,
+          callerNote: params.callerNote,
+        }),
     );
 
-    if (!conversationId) {
-      this.logger.warn(
-        `No Hostaway conversation for reservation ${params.reservationHostawayId} — inbox forward pending`,
-      );
-      return {
-        forwarded: false,
-        inboxPending: true,
-        error: 'No Hostaway guest conversation found for this reservation',
-      };
-    }
-
-    try {
-      const messageId = await this.messaging.forwardRequestToInbox({
-        conversationId,
-        guestRequestId: params.guestRequestId,
-        requestType: params.requestType,
-        requestTypeLabel: REQUEST_TYPE_LABELS[params.requestType],
-        summary: params.summaryLines.join('\n'),
-        ruleReason: params.ruleReason,
-        callerNote: params.callerNote,
-      });
-
+    if (result.posted && result.messageId) {
       await this.prisma.guestRequest.update({
         where: { id: params.guestRequestId },
         data: {
           forwardedToHostaway: true,
-          hostawayMessageId: messageId,
+          hostawayMessageId: result.messageId,
         },
       });
-
-      return {
-        forwarded: true,
-        conversationId,
-        messageId,
-        inboxPending: false,
-      };
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Hostaway message send failed';
-      this.logger.error(
-        `Failed to forward request ${params.guestRequestId}: ${message}`,
-      );
-      return {
-        forwarded: false,
-        conversationId,
-        inboxPending: true,
-        error: message,
-      };
     }
+
+    return {
+      forwarded: result.posted,
+      conversationId: result.conversationId,
+      messageId: result.messageId,
+      inboxPending: result.inboxPending,
+      error: result.error,
+    };
   }
 
   async retryForward(guestRequestId: string) {
